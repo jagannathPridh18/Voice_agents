@@ -11,6 +11,12 @@ import logger from '@/lib/logger';
 import { sdpFilterCodec } from "../utils";
 import { useDeviceInputs } from "./useDeviceInputs";
 
+// Monotonic counter ensures feedback message ids are unique even when multiple
+// events of the same type arrive within the same millisecond (e.g. burst of
+// pipeline errors), which would otherwise produce duplicate React keys.
+let feedbackIdCounter = 0;
+const nextFeedbackId = (prefix: string) => `${prefix}-${Date.now()}-${++feedbackIdCounter}`;
+
 interface UseWebSocketRTCProps {
     workflowId: number;
     workflowRunId: number;
@@ -308,7 +314,7 @@ export const useWebSocketRTC = ({ workflowId, workflowRunId, accessToken, initia
                             ) {
                                 interruptWarningShownRef.current = true;
                                 setFeedbackMessages(prev => [...prev, {
-                                    id: `interrupt-warning-${Date.now()}`,
+                                    id: nextFeedbackId('interrupt-warning'),
                                     type: 'interrupt-warning',
                                     text: 'Interruption is disabled for this step. The bot will finish speaking before processing your input. You can enable interruption in the workflow editor.',
                                     timestamp: new Date().toISOString(),
@@ -332,7 +338,7 @@ export const useWebSocketRTC = ({ workflowId, workflowRunId, accessToken, initia
 
                                 // Step 3: Add new transcription (interim or final)
                                 return [...messagesWithoutInterim, {
-                                    id: `user-${Date.now()}`,
+                                    id: nextFeedbackId('user'),
                                     type: 'user-transcription',
                                     text: transcription.text,
                                     final: transcription.final,
@@ -355,7 +361,7 @@ export const useWebSocketRTC = ({ workflowId, workflowRunId, accessToken, initia
                                 }
                                 // Start new bot message
                                 return [...prev, {
-                                    id: `bot-${Date.now()}`,
+                                    id: nextFeedbackId('bot'),
                                     type: 'bot-text',
                                     text: message.payload.text,
                                     final: false,
@@ -371,7 +377,7 @@ export const useWebSocketRTC = ({ workflowId, workflowRunId, accessToken, initia
                                 // Check if we already have this function call
                                 const existingId = tool_call_id
                                     ? `func-${tool_call_id}`
-                                    : `func-${Date.now()}`;
+                                    : nextFeedbackId('func');
                                 if (prev.some(msg => msg.id === existingId)) {
                                     return prev;
                                 }
@@ -411,7 +417,7 @@ export const useWebSocketRTC = ({ workflowId, workflowRunId, accessToken, initia
                             const transitionTimestamp = new Date().toISOString();
                             const transition: ConversationNodeTransitionItem = {
                                 kind: 'node-transition',
-                                id: `node-${Date.now()}`,
+                                id: nextFeedbackId('node'),
                                 timestamp: transitionTimestamp,
                                 nodeId: node_id,
                                 nodeName: node_name ?? 'Node',
@@ -437,7 +443,7 @@ export const useWebSocketRTC = ({ workflowId, workflowRunId, accessToken, initia
                         case 'rtf-ttfb-metric': {
                             const { ttfb_seconds, processor, model } = message.payload;
                             setFeedbackMessages(prev => [...prev, {
-                                id: `ttfb-${Date.now()}`,
+                                id: nextFeedbackId('ttfb'),
                                 type: 'ttfb-metric',
                                 text: `${(ttfb_seconds * 1000).toFixed(0)}ms`,
                                 ttfbSeconds: ttfb_seconds,
@@ -451,7 +457,7 @@ export const useWebSocketRTC = ({ workflowId, workflowRunId, accessToken, initia
                         case 'rtf-pipeline-error': {
                             const { error, fatal, processor: errorProcessor } = message.payload;
                             setFeedbackMessages(prev => [...prev, {
-                                id: `error-${Date.now()}`,
+                                id: nextFeedbackId('error'),
                                 type: 'pipeline-error',
                                 text: error,
                                 fatal,

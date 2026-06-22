@@ -23,7 +23,10 @@ function AppHeader() {
         <Button variant="ghost" size="icon" onClick={toggleSidebar} aria-label="Open menu" className="md:hidden">
           <Menu className="h-5 w-5" />
         </Button>
-        <Link href="/" className="text-lg font-bold md:hidden">Dograh</Link>
+        <Link href="/" className="flex items-center gap-2 text-lg font-bold md:hidden">
+          <img src="/chatbucket-logo.svg" alt="" className="h-6 w-6" />
+          Chatbucket
+        </Link>
       </div>
       <div className="flex items-center gap-3">
         <Button variant="ghost" size="sm" asChild>

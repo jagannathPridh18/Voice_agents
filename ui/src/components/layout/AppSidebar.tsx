@@ -264,7 +264,8 @@ export function AppSidebar() {
               className="notranslate flex items-center gap-2 px-2 text-xl font-bold"
               translate="no"
             >
-              Dograh
+              <img src="/chatbucket-logo.svg" alt="" className="h-6 w-6 shrink-0" />
+              Chatbucket
               {versionInfo && (
                 <span
                   className="notranslate text-xs font-normal text-muted-foreground"
