@@ -71,6 +71,7 @@ class ServiceProviders(str, Enum):
     ASSEMBLYAI = "assemblyai"
     GLADIA = "gladia"
     RIME = "rime"
+    MURF = "murf"
     MINIMAX = "minimax"
     GOOGLE_VERTEX = "google_vertex"
     OPENAI_REALTIME = "openai_realtime"
@@ -97,6 +98,7 @@ class BaseServiceConfiguration(BaseModel):
         ServiceProviders.ASSEMBLYAI,
         ServiceProviders.GLADIA,
         ServiceProviders.RIME,
+        ServiceProviders.MURF,
         ServiceProviders.MINIMAX,
         ServiceProviders.GOOGLE_VERTEX,
         ServiceProviders.OPENAI_REALTIME,
@@ -243,6 +245,11 @@ CARTESIA_PROVIDER_MODEL_CONFIG = provider_model_config("Cartesia")
 SARVAM_PROVIDER_MODEL_CONFIG = provider_model_config("Sarvam")
 CAMB_PROVIDER_MODEL_CONFIG = provider_model_config("Camb.ai")
 RIME_PROVIDER_MODEL_CONFIG = provider_model_config("Rime")
+MURF_PROVIDER_MODEL_CONFIG = provider_model_config(
+    "Murf",
+    description="Murf AI WebSocket streaming TTS (Falcon / Gen2).",
+    provider_docs_url="https://murf.ai/api/docs/text-to-speech/web-sockets",
+)
 GOOGLE_CLOUD_PROVIDER_MODEL_CONFIG = provider_model_config("Google Cloud")
 SPEECHMATICS_PROVIDER_MODEL_CONFIG = provider_model_config("Speechmatics")
 ASSEMBLYAI_PROVIDER_MODEL_CONFIG = provider_model_config("AssemblyAI")
@@ -1006,6 +1013,28 @@ class RimeTTSConfiguration(BaseTTSConfiguration):
     )
 
 
+MURF_TTS_MODELS = ["FALCON", "GEN2"]
+
+
+@register_tts
+class MurfTTSConfiguration(BaseTTSConfiguration):
+    model_config = MURF_PROVIDER_MODEL_CONFIG
+    provider: Literal[ServiceProviders.MURF] = ServiceProviders.MURF
+    model: str = Field(
+        default="FALCON",
+        description="Murf TTS model.",
+        json_schema_extra={"examples": MURF_TTS_MODELS, "allow_custom_input": True},
+    )
+    voice: str = Field(
+        default="Matthew",
+        description="Murf voice ID (e.g. Matthew, Ruby).",
+    )
+    style: str = Field(
+        default="Conversational",
+        description="Murf voice style (e.g. Conversational, Promo, Narration).",
+    )
+
+
 SPEACHES_TTS_MODELS = ["hexgrad/Kokoro-82M"]
 
 
@@ -1131,6 +1160,7 @@ TTSConfig = Annotated[
         SarvamTTSConfiguration,
         CambTTSConfiguration,
         RimeTTSConfiguration,
+        MurfTTSConfiguration,
         SpeachesTTSConfiguration,
         MiniMaxTTSConfiguration,
         AzureSpeechTTSConfiguration,

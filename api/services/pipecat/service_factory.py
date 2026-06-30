@@ -49,6 +49,7 @@ from pipecat.services.openai.stt import (
 )
 from pipecat.services.openai.tts import OpenAITTSService, OpenAITTSSettings
 from pipecat.services.openrouter.llm import OpenRouterLLMService, OpenRouterLLMSettings
+from pipecat.services.murf.tts import MurfTTSService, MurfTTSSettings
 from pipecat.services.rime.tts import RimeTTSService, RimeTTSSettings
 from pipecat.services.sarvam.llm import SarvamLLMService, SarvamLLMSettings
 from pipecat.services.sarvam.stt import SarvamSTTService, SarvamSTTSettings
@@ -463,6 +464,19 @@ def create_tts_service(user_config, audio_config: "AudioConfig"):
         return RimeTTSService(
             api_key=user_config.tts.api_key,
             settings=RimeTTSSettings(**settings_kwargs),
+            text_filters=[xml_function_tag_filter],
+            skip_aggregator_types=["recording_router", "recording"],
+            silence_time_s=1.0,
+        )
+    elif user_config.tts.provider == ServiceProviders.MURF.value:
+        style = getattr(user_config.tts, "style", None) or "Conversational"
+        return MurfTTSService(
+            api_key=user_config.tts.api_key,
+            settings=MurfTTSSettings(
+                model=user_config.tts.model,
+                voice=user_config.tts.voice,
+                style=style,
+            ),
             text_filters=[xml_function_tag_filter],
             skip_aggregator_types=["recording_router", "recording"],
             silence_time_s=1.0,

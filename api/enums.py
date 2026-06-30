@@ -25,6 +25,7 @@ class WorkflowRunMode(Enum):
     VOBIZ = "vobiz"
     CLOUDONIX = "cloudonix"
     TELNYX = "telnyx"
+    EXOTEL = "exotel"
     WEBRTC = "webrtc"
     SMALLWEBRTC = "smallwebrtc"
     TEXTCHAT = "textchat"
