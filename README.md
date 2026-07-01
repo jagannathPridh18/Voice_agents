@@ -1,4 +1,4 @@
-# Dograh AI
+# Chatbucket AI
 
 **The open-source, self-hostable alternative to Vapi & Retell** — build production voice agents with a drag-and-drop workflow builder. From zero to a working bot in under 2 minutes.
 
