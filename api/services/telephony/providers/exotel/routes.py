@@ -30,6 +30,7 @@ from api.services.telephony.status_processor import (
     _process_status_update,
 )
 from api.utils.telephony_address import normalize_telephony_address
+from api.utils.telephony_helper import numbers_match
 
 from .provider import ExotelProvider
 
@@ -137,6 +138,31 @@ async def _run_existing(
     )
 
 
+async def _fuzzy_find_inbound_route(account_sid: str, to_number: str):
+    """Fallback inbound-route resolution when the exact E.164 match misses.
+
+    Exotel's ``start`` event carries the dialed Exophone in national format
+    (``04048214465``), which normalizes to ``+04048214465`` — not the stored
+    E.164 ``+914048214465``. Scan the Exotel configs owning ``account_sid`` and
+    apply the country-aware :func:`numbers_match` over their active numbers, the
+    same fuzzy path the shared ``/inbound/run`` dispatcher uses.
+
+    Returns ``(config, phone_number)`` like ``find_inbound_route_by_account`` or
+    ``None`` if nothing matches.
+    """
+    if not account_sid or not to_number:
+        return None
+
+    configs = await db_client.list_all_telephony_configurations_by_provider(_PROVIDER)
+    for config in configs:
+        if (config.credentials or {}).get(_ACCOUNT_FIELD) != account_sid:
+            continue
+        for phone_row in await db_client.list_phone_numbers_for_config(config.id):
+            if phone_row.is_active and numbers_match(to_number, phone_row.address):
+                return config, phone_row
+    return None
+
+
 async def _run_inbound(
     websocket: WebSocket,
     run_pipeline_telephony,
@@ -163,6 +189,13 @@ async def _run_inbound(
         to_number=to_number,
         country_hint=None,
     )
+    # Exotel reports the dialed Exophone in national format (e.g. "04048214465")
+    # while numbers are stored E.164 ("+914048214465"), so the exact-match
+    # primary lookup misses. Fall back to the country-aware fuzzy matcher over
+    # the account's active numbers, mirroring the shared /inbound/run dispatcher
+    # (see find_inbound_route_by_account's docstring).
+    if not match:
+        match = await _fuzzy_find_inbound_route(account_sid, to_number)
     if not match:
         logger.warning(
             f"[Exotel] no inbound route for to={to_number} account_sid={account_sid}"
