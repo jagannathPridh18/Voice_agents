@@ -16,6 +16,13 @@ variable "create_route53_records" {
   default = true
 }
 
+# When false, the cert is created but not waited-on (used in HTTP-only mode, or
+# before the external DNS validation record has been added).
+variable "create_validation" {
+  type    = bool
+  default = true
+}
+
 resource "aws_acm_certificate" "this" {
   domain_name       = var.domain_name
   validation_method = "DNS"
@@ -44,6 +51,7 @@ resource "aws_route53_record" "validation" {
 }
 
 resource "aws_acm_certificate_validation" "this" {
+  count           = var.create_validation ? 1 : 0
   certificate_arn = aws_acm_certificate.this.arn
   # Route53 path passes the FQDNs it just created; external-DNS path passes
   # nothing and simply waits for the cert to reach ISSUED once you add the
@@ -52,8 +60,8 @@ resource "aws_acm_certificate_validation" "this" {
 }
 
 output "certificate_arn" {
-  # The validated ARN — the ALB listener waits on validation completing.
-  value = aws_acm_certificate_validation.this.certificate_arn
+  # Validated ARN when we waited; otherwise the (possibly-pending) cert ARN.
+  value = var.create_validation ? aws_acm_certificate_validation.this[0].certificate_arn : aws_acm_certificate.this.arn
 }
 
 output "domain_validation_options" {

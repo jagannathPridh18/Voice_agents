@@ -7,12 +7,17 @@ environment = "prod"
 region      = "ap-south-1"
 
 # --- DNS / TLS --------------------------------------------------------------
-# chatbucket.chat DNS is on Cloudflare, so DNS is managed externally: Terraform
-# issues the ACM cert and waits for you to add the validation record + app
-# record in Cloudflare (see the terraform outputs after apply).
+# Deploy HTTP-only for now (no DNS dependency); the stack comes up on the ALB
+# URL. Once chatbucket.chat DNS is set up in Cloudflare, add the validation +
+# app records, set enable_https = true, and re-apply to serve https on the
+# domain.
 domain_name            = "app.chatbucket.chat"
+enable_https           = false
 create_route53_records = false
 create_turn_dns        = false # TURN_HOST uses the coturn Elastic IP directly
+
+# An OIDC provider for GitHub Actions already exists in this account.
+create_github_oidc_provider = false
 
 # --- CI/CD (REQUIRED) -------------------------------------------------------
 # Must match the repo hosting the workflows — this is what the OIDC role trusts.

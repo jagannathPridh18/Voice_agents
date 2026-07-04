@@ -49,8 +49,10 @@ resource "aws_lb_target_group" "ui" {
   deregistration_delay = 30
 }
 
-# HTTP -> HTTPS redirect
-resource "aws_lb_listener" "http" {
+# --- HTTPS mode (enable_https = true) ---------------------------------------
+# Port 80 redirects to 443; 443 terminates TLS with the ACM cert.
+resource "aws_lb_listener" "http_redirect" {
+  count             = var.enable_https ? 1 : 0
   load_balancer_arn = aws_lb.this.arn
   port              = 80
   protocol          = "HTTP"
@@ -66,13 +68,27 @@ resource "aws_lb_listener" "http" {
 }
 
 resource "aws_lb_listener" "https" {
+  count             = var.enable_https ? 1 : 0
   load_balancer_arn = aws_lb.this.arn
   port              = 443
   protocol          = "HTTPS"
   ssl_policy        = "ELBSecurityPolicy-TLS13-1-2-2021-06"
   certificate_arn   = var.certificate_arn
 
-  # Default: everything the UI serves.
+  default_action {
+    type             = "forward"
+    target_group_arn = aws_lb_target_group.ui.arn
+  }
+}
+
+# --- HTTP-only mode (enable_https = false) ----------------------------------
+# Port 80 serves the app directly (no cert / no DNS needed).
+resource "aws_lb_listener" "http" {
+  count             = var.enable_https ? 0 : 1
+  load_balancer_arn = aws_lb.this.arn
+  port              = 80
+  protocol          = "HTTP"
+
   default_action {
     type             = "forward"
     target_group_arn = aws_lb_target_group.ui.arn
@@ -80,16 +96,33 @@ resource "aws_lb_listener" "https" {
 }
 
 # All backend + WebSocket traffic goes straight to the api service (the Next
-# proxy can't carry WS upgrades for /api/v1/ws/signaling/...).
-resource "aws_lb_listener_rule" "api" {
-  listener_arn = aws_lb_listener.https.arn
+# proxy can't carry WS upgrades for /api/v1/ws/signaling/...). Attach the rule
+# to whichever listener is active.
+resource "aws_lb_listener_rule" "api_https" {
+  count        = var.enable_https ? 1 : 0
+  listener_arn = aws_lb_listener.https[0].arn
   priority     = 100
 
   action {
     type             = "forward"
     target_group_arn = aws_lb_target_group.api.arn
   }
+  condition {
+    path_pattern {
+      values = ["/api/v1/*"]
+    }
+  }
+}
 
+resource "aws_lb_listener_rule" "api_http" {
+  count        = var.enable_https ? 0 : 1
+  listener_arn = aws_lb_listener.http[0].arn
+  priority     = 100
+
+  action {
+    type             = "forward"
+    target_group_arn = aws_lb_target_group.api.arn
+  }
   condition {
     path_pattern {
       values = ["/api/v1/*"]

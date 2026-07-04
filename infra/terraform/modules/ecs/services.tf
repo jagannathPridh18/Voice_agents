@@ -37,7 +37,7 @@ resource "aws_ecs_service" "api" {
     rollback = true
   }
 
-  depends_on = [aws_lb_listener.https]
+  depends_on = [aws_lb_listener.https, aws_lb_listener.http, aws_lb_listener.http_redirect]
 
   lifecycle {
     ignore_changes = [task_definition, desired_count]
@@ -71,7 +71,7 @@ resource "aws_ecs_service" "ui" {
     rollback = true
   }
 
-  depends_on = [aws_lb_listener.https]
+  depends_on = [aws_lb_listener.https, aws_lb_listener.http, aws_lb_listener.http_redirect]
 
   lifecycle {
     ignore_changes = [task_definition, desired_count]

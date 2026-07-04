@@ -60,6 +60,12 @@ variable "create_route53_records" {
   default     = true
 }
 
+variable "enable_https" {
+  description = "Serve HTTPS on your domain (needs the ACM cert validated via DNS). Set false to deploy HTTP-only on the ALB URL with no DNS dependency; flip to true once DNS is set up."
+  type        = bool
+  default     = true
+}
+
 variable "create_turn_dns" {
   description = "Create a DNS record pointing turn_subdomain.<zone> at the coturn Elastic IP."
   type        = bool

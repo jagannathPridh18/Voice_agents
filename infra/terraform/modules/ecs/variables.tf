@@ -55,7 +55,14 @@ variable "ui_port" {
 }
 
 variable "certificate_arn" {
-  type = string
+  type    = string
+  default = ""
+}
+
+variable "enable_https" {
+  description = "Serve HTTPS (443) with the ACM cert. When false, the ALB is HTTP-only (80) — no cert/DNS needed."
+  type        = bool
+  default     = true
 }
 
 variable "cloudmap_namespace" {

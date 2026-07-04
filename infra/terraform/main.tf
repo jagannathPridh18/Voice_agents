@@ -121,6 +121,8 @@ module "dns" {
   domain_name            = var.domain_name
   route53_zone_id        = var.route53_zone_id
   create_route53_records = var.create_route53_records
+  # Only wait on cert validation when we're actually serving HTTPS.
+  create_validation = var.enable_https
 }
 
 # ---------------------------------------------------------------------------
@@ -149,7 +151,8 @@ module "ecs" {
   api_port = 8000
   ui_port  = 3010
 
-  certificate_arn = module.dns.certificate_arn
+  enable_https    = var.enable_https
+  certificate_arn = var.enable_https ? module.dns.certificate_arn : ""
 
   # Sizing
   api_cpu              = var.api_cpu
