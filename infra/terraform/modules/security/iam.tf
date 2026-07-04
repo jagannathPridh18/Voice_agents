@@ -149,7 +149,7 @@ resource "aws_iam_policy" "tf_containers" {
           "ecs:Describe*", "ecs:List*",
           "ecr:Describe*", "ecr:GetLifecyclePolicy", "ecr:GetRepositoryPolicy", "ecr:ListTagsForResource",
           "servicediscovery:Get*", "servicediscovery:List*",
-          "application-autoscaling:Describe*",
+          "application-autoscaling:Describe*", "application-autoscaling:ListTagsForResource",
         ]
         Resource = "*"
       },
