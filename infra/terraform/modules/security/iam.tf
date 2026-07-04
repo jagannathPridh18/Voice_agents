@@ -112,6 +112,9 @@ resource "aws_iam_policy" "tf_network" {
           "ec2:UpdateSecurityGroupRuleDescriptionsIngress", "ec2:UpdateSecurityGroupRuleDescriptionsEgress",
           "ec2:RunInstances", "ec2:TerminateInstances", "ec2:StartInstances", "ec2:StopInstances",
           "ec2:ModifyInstanceAttribute", "ec2:ModifyInstanceMetadataOptions",
+          "ec2:RequestSpotInstances", "ec2:CancelSpotInstanceRequests",
+          # EFS mount targets create ENIs; the caller needs these.
+          "ec2:CreateNetworkInterface", "ec2:DeleteNetworkInterface", "ec2:ModifyNetworkInterfaceAttribute",
           "ec2:CreateTags", "ec2:DeleteTags",
         ]
       },
