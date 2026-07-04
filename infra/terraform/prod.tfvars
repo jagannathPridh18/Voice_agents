@@ -41,3 +41,8 @@ deploy_coturn = false
 alarm_email        = "" # e.g. "oncall@example.com" to receive alarm emails
 log_retention_days = 30
 enable_telemetry   = false
+
+# Self-hosted OSS mode. Enables the OSS (free-tier, keyed by user) path for the
+# MPS "Agent Builder", and same-origin-safe CORS. `production` flips MPS to the
+# paid org tier that needs a DOGRAH_MPS_SECRET_KEY (→ 401 on self-hosted).
+deployment_mode = "oss"
