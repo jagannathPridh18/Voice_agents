@@ -33,9 +33,11 @@ db_engine_version    = "16.9" # ap-south-1 offers 16.9+ (not 16.4)
 redis_node_type      = "cache.t3.micro"
 coturn_instance_type = "t3.small"
 
-# The account's EC2 vCPU quota (16) is fully used by existing instances, so
-# skip coturn for now. WebRTC voice needs it + HTTPS; enable after a quota bump.
-deploy_coturn = false
+# On-demand Standard vCPU quota (16) is maxed, so run coturn on Spot (separate
+# quota, 32 free). Enables WebRTC voice. Spot can be interrupted (rare for
+# t3.small); move to on-demand once the vCPU quota increase is approved.
+deploy_coturn   = true
+coturn_use_spot = true
 
 # --- Ops --------------------------------------------------------------------
 alarm_email        = "" # e.g. "oncall@example.com" to receive alarm emails

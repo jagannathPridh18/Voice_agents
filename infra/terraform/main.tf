@@ -102,6 +102,7 @@ module "coturn" {
   vpc_id           = module.network.vpc_id
   public_subnet_id = module.network.public_subnet_ids[0]
   instance_type    = var.coturn_instance_type
+  use_spot         = var.coturn_use_spot
   region           = local.region
 
   turn_secret_arn = module.data.turn_secret_arn
@@ -193,6 +194,10 @@ module "ecs" {
     SERVER_IP            = local.coturn_ip
     FORCE_TURN_RELAY     = "false"
     ENABLE_ARI_STASIS    = "true"
+    # coturn has no TLS cert and TURN_HOST is an IP, so disable turns: (TLS)
+    # URIs — "turns:<ip>" is rejected by browsers ("invalid hostname format").
+    # Only turn:<ip>:3478 (UDP/TCP) is used; WebRTC media is still SRTP-encrypted.
+    TURN_TLS_PORT = "0"
   }
 
   ui_env = {

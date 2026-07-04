@@ -14,6 +14,12 @@ variable "instance_type" {
   type = string
 }
 
+variable "use_spot" {
+  description = "Launch coturn as a Spot instance (separate vCPU quota from on-demand). Cheaper, but can be interrupted."
+  type        = bool
+  default     = false
+}
+
 variable "region" {
   type = string
 }

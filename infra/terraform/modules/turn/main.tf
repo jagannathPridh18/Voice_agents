@@ -164,6 +164,19 @@ resource "aws_instance" "coturn" {
     http_endpoint = "enabled"
   }
 
+  # Optionally run on Spot (separate vCPU quota from on-demand). Persistent +
+  # stop so an interruption stops (not terminates) the box and it can recover.
+  dynamic "instance_market_options" {
+    for_each = var.use_spot ? [1] : []
+    content {
+      market_type = "spot"
+      spot_options {
+        spot_instance_type             = "persistent"
+        instance_interruption_behavior = "stop"
+      }
+    }
+  }
+
   root_block_device {
     # AL2023 AMI snapshot is 30 GB, so the root volume must be >= 30.
     volume_size = 30

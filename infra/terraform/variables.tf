@@ -236,6 +236,12 @@ variable "coturn_instance_type" {
   type    = string
   default = "t3.small"
 }
+
+variable "coturn_use_spot" {
+  description = "Launch coturn on Spot (uses the Spot vCPU quota instead of the maxed on-demand Standard quota)."
+  type        = bool
+  default     = false
+}
 variable "turn_relay_port_min" {
   type    = number
   default = 49152
