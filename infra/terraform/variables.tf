@@ -226,6 +226,12 @@ variable "redis_engine_version" {
 # ---------------------------------------------------------------------------
 # coturn
 # ---------------------------------------------------------------------------
+variable "deploy_coturn" {
+  description = "Deploy the coturn TURN server (EC2). Set false to skip it (e.g. when the EC2 vCPU quota is maxed or WebRTC voice isn't needed yet)."
+  type        = bool
+  default     = true
+}
+
 variable "coturn_instance_type" {
   type    = string
   default = "t3.small"

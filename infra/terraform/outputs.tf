@@ -80,8 +80,8 @@ output "github_deploy_role_arn" {
 }
 
 output "coturn_public_ip" {
-  description = "Elastic IP of the coturn TURN server."
-  value       = module.coturn.public_ip
+  description = "Elastic IP of the coturn TURN server (empty when deploy_coturn = false)."
+  value       = local.coturn_ip
 }
 
 output "turn_host" {

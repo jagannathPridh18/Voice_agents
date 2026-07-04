@@ -13,7 +13,8 @@ locals {
 
   app_url   = "https://${var.domain_name}"
   turn_fqdn = "${var.turn_subdomain}.${var.domain_name}"
-  turn_host = var.create_turn_dns ? local.turn_fqdn : module.coturn.public_ip
+  coturn_ip = var.deploy_coturn ? module.coturn[0].public_ip : ""
+  turn_host = var.deploy_coturn ? (var.create_turn_dns ? local.turn_fqdn : local.coturn_ip) : ""
 }
 
 # ---------------------------------------------------------------------------
@@ -95,6 +96,7 @@ module "coturn" {
   # Directory is modules/turn (not "coturn") because the repo .gitignore has a
   # `coturn/` rule that would exclude it from commits. Module name stays coturn.
   source = "./modules/turn"
+  count  = var.deploy_coturn ? 1 : 0
 
   name_prefix      = local.name_prefix
   vpc_id           = module.network.vpc_id
@@ -188,7 +190,7 @@ module "ecs" {
     CORS_ALLOWED_ORIGINS = local.app_url
     ENABLE_TELEMETRY     = tostring(var.enable_telemetry)
     TURN_HOST            = local.turn_host
-    SERVER_IP            = module.coturn.public_ip
+    SERVER_IP            = local.coturn_ip
     FORCE_TURN_RELAY     = "false"
     ENABLE_ARI_STASIS    = "true"
   }
@@ -252,10 +254,10 @@ resource "aws_route53_record" "app" {
 }
 
 resource "aws_route53_record" "turn" {
-  count   = var.create_route53_records && var.create_turn_dns ? 1 : 0
+  count   = var.deploy_coturn && var.create_route53_records && var.create_turn_dns ? 1 : 0
   zone_id = var.route53_zone_id
   name    = local.turn_fqdn
   type    = "A"
   ttl     = 300
-  records = [module.coturn.public_ip]
+  records = [local.coturn_ip]
 }
