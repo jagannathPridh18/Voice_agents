@@ -31,10 +31,17 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     environment: production
+    # Skip cleanly until the infra + repo variables are provisioned, so an
+    # early manual dispatch doesn't fail with empty ARNs.
+    if: vars.AWS_DEPLOY_ROLE_ARN != ''
     steps:
       - uses: actions/checkout@v4
         with:
           submodules: true
+          # pipecat is a PRIVATE submodule repo, so the default GITHUB_TOKEN
+          # can't clone it. Provide a PAT with read access to it as
+          # PIPECAT_TOKEN (or make the pipecat repo public and this falls back).
+          token: ${{ secrets.PIPECAT_TOKEN || secrets.GITHUB_TOKEN }}
 
       - name: Compute image tag
         id: tag

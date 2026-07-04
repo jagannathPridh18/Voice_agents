@@ -35,9 +35,7 @@ _UI_METADATA = ProviderUIMetadata(
     display_name="Exotel",
     docs_url="https://docs.dograh.com/integrations/telephony/exotel",
     fields=[
-        ProviderUIField(
-            name="api_key", label="API Key", type="text", sensitive=True
-        ),
+        ProviderUIField(name="api_key", label="API Key", type="text", sensitive=True),
         ProviderUIField(
             name="api_token", label="API Token", type="password", sensitive=True
         ),
