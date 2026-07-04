@@ -165,7 +165,8 @@ resource "aws_instance" "coturn" {
   }
 
   root_block_device {
-    volume_size = 20
+    # AL2023 AMI snapshot is 30 GB, so the root volume must be >= 30.
+    volume_size = 30
     encrypted   = true
   }
 

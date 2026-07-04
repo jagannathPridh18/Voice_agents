@@ -29,6 +29,7 @@ api_desired_count    = 2
 ui_desired_count     = 2
 worker_desired_count = 1
 db_instance_class    = "db.t3.medium"
+db_engine_version    = "16.9" # ap-south-1 offers 16.9+ (not 16.4)
 redis_node_type      = "cache.t3.micro"
 coturn_instance_type = "t3.small"
 
