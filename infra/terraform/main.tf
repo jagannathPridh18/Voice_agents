@@ -92,7 +92,9 @@ module "ecr" {
 # coturn (TURN server) on EC2 + Elastic IP
 # ---------------------------------------------------------------------------
 module "coturn" {
-  source = "./modules/coturn"
+  # Directory is modules/turn (not "coturn") because the repo .gitignore has a
+  # `coturn/` rule that would exclude it from commits. Module name stays coturn.
+  source = "./modules/turn"
 
   name_prefix      = local.name_prefix
   vpc_id           = module.network.vpc_id
