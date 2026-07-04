@@ -192,8 +192,11 @@ module "ecs" {
     ENABLE_TELEMETRY     = tostring(var.enable_telemetry)
     TURN_HOST            = local.turn_host
     SERVER_IP            = local.coturn_ip
-    FORCE_TURN_RELAY     = "false"
-    ENABLE_ARI_STASIS    = "true"
+    # The api runs on Fargate in a private subnet (no public reachability), so
+    # its only working ICE candidate is the coturn relay. Force relay-only on
+    # both peers to skip dead host/srflx candidates that make ICE unstable.
+    FORCE_TURN_RELAY  = "true"
+    ENABLE_ARI_STASIS = "true"
     # coturn has no TLS cert and TURN_HOST is an IP, so disable turns: (TLS)
     # URIs — "turns:<ip>" is rejected by browsers ("invalid hostname format").
     # Only turn:<ip>:3478 (UDP/TCP) is used; WebRTC media is still SRTP-encrypted.
