@@ -31,6 +31,9 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     environment: production
+    # Skip cleanly until the infra + repo variables are provisioned, so an
+    # early manual dispatch doesn't fail with empty ARNs.
+    if: vars.AWS_DEPLOY_ROLE_ARN != ''
     steps:
       - uses: actions/checkout@v4
         with:
