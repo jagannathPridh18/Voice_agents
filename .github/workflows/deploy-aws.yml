@@ -1,0 +1,156 @@
+name: Deploy to AWS (ECS)
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: "Image tag to build/deploy. Defaults to the short SHA."
+        required: false
+        type: string
+
+permissions:
+  id-token: write # OIDC
+  contents: read
+
+env:
+  AWS_REGION: ${{ vars.AWS_REGION }}
+  API_REPO: ${{ vars.ECR_API_REPO }} # e.g. <acct>.dkr.ecr.<region>.amazonaws.com/dograh-prod-api
+  UI_REPO: ${{ vars.ECR_UI_REPO }}
+  CLUSTER: ${{ vars.ECS_CLUSTER }} # e.g. dograh-prod-cluster
+  NAME_PREFIX: ${{ vars.NAME_PREFIX }} # e.g. dograh-prod
+  ECS_SUBNETS: ${{ vars.ECS_SUBNETS }} # comma-separated private subnet IDs
+  ECS_SECURITY_GROUP: ${{ vars.ECS_SECURITY_GROUP }} # ecs service SG id
+
+concurrency:
+  group: deploy-aws
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+
+      - name: Compute image tag
+        id: tag
+        run: |
+          if [ "${{ github.event_name }}" = "release" ]; then
+            TAG="${{ github.event.release.tag_name }}"
+            TAG="${TAG#dograh-}"; TAG="${TAG#v}"
+          else
+            TAG="${{ inputs.image_tag }}"
+            [ -z "$TAG" ] && TAG="sha-${GITHUB_SHA::8}"
+          fi
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Build & push api image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: api/Dockerfile
+          platforms: linux/amd64
+          push: true
+          tags: |
+            ${{ env.API_REPO }}:${{ steps.tag.outputs.tag }}
+            ${{ env.API_REPO }}:latest
+          cache-from: type=gha,scope=api
+          cache-to: type=gha,mode=max,scope=api
+
+      - name: Build & push ui image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ui/Dockerfile
+          platforms: linux/amd64
+          push: true
+          tags: |
+            ${{ env.UI_REPO }}:${{ steps.tag.outputs.tag }}
+            ${{ env.UI_REPO }}:latest
+          cache-from: type=gha,scope=ui
+          cache-to: type=gha,mode=max,scope=ui
+
+      - name: Register new task definitions
+        id: register
+        env:
+          TAG: ${{ steps.tag.outputs.tag }}
+        run: |
+          set -euo pipefail
+          register() {
+            local family="$1" image="$2"
+            local td new
+            td=$(aws ecs describe-task-definition --task-definition "$family" --query 'taskDefinition' --output json)
+            new=$(echo "$td" | jq --arg IMAGE "$image" '
+              .containerDefinitions[0].image=$IMAGE
+              | del(.taskDefinitionArn,.revision,.status,.requiresAttributes,.compatibilities,.registeredAt,.registeredBy)')
+            aws ecs register-task-definition --cli-input-json "$new" \
+              --query 'taskDefinition.taskDefinitionArn' --output text
+          }
+          API_IMAGE="${API_REPO}:${TAG}"
+          UI_IMAGE="${UI_REPO}:${TAG}"
+          {
+            echo "api_td=$(register "${NAME_PREFIX}-api" "$API_IMAGE")"
+            echo "worker_td=$(register "${NAME_PREFIX}-worker" "$API_IMAGE")"
+            echo "telephony_td=$(register "${NAME_PREFIX}-telephony" "$API_IMAGE")"
+            echo "orchestrator_td=$(register "${NAME_PREFIX}-orchestrator" "$API_IMAGE")"
+            echo "migrate_td=$(register "${NAME_PREFIX}-migrate" "$API_IMAGE")"
+            echo "ui_td=$(register "${NAME_PREFIX}-ui" "$UI_IMAGE")"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Run DB migration (alembic upgrade head)
+        run: |
+          set -euo pipefail
+          TASK_ARN=$(aws ecs run-task \
+            --cluster "$CLUSTER" \
+            --task-definition "${{ steps.register.outputs.migrate_td }}" \
+            --launch-type FARGATE \
+            --network-configuration "awsvpcConfiguration={subnets=[$ECS_SUBNETS],securityGroups=[$ECS_SECURITY_GROUP],assignPublicIp=DISABLED}" \
+            --query 'tasks[0].taskArn' --output text)
+          echo "Migration task: $TASK_ARN"
+          aws ecs wait tasks-stopped --cluster "$CLUSTER" --tasks "$TASK_ARN"
+          EXIT=$(aws ecs describe-tasks --cluster "$CLUSTER" --tasks "$TASK_ARN" \
+            --query 'tasks[0].containers[0].exitCode' --output text)
+          echo "Migration exit code: $EXIT"
+          if [ "$EXIT" != "0" ]; then
+            echo "::error::DB migration failed (exit $EXIT)"; exit 1
+          fi
+
+      - name: Roll services
+        run: |
+          set -euo pipefail
+          update() { aws ecs update-service --cluster "$CLUSTER" --service "$1" --task-definition "$2" >/dev/null; }
+          update "${NAME_PREFIX}-api"          "${{ steps.register.outputs.api_td }}"
+          update "${NAME_PREFIX}-ui"           "${{ steps.register.outputs.ui_td }}"
+          update "${NAME_PREFIX}-worker"       "${{ steps.register.outputs.worker_td }}"
+          update "${NAME_PREFIX}-telephony"    "${{ steps.register.outputs.telephony_td }}"
+          update "${NAME_PREFIX}-orchestrator" "${{ steps.register.outputs.orchestrator_td }}"
+
+          aws ecs wait services-stable --cluster "$CLUSTER" --services \
+            "${NAME_PREFIX}-api" "${NAME_PREFIX}-ui" "${NAME_PREFIX}-worker" \
+            "${NAME_PREFIX}-telephony" "${NAME_PREFIX}-orchestrator"
+
+      - name: Slack notify
+        if: always() && vars.SLACK_ENABLED == 'true'
+        uses: slackapi/slack-github-action@v1.26.0
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+        with:
+          payload: |
+            {
+              "text": "${{ job.status == 'success' && '✅' || '❌' }} AWS deploy ${{ steps.tag.outputs.tag }} on ${{ github.ref_name }} by ${{ github.actor }} — <${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|logs>"
+            }
