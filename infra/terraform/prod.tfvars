@@ -11,8 +11,8 @@ region      = "ap-south-1"
 # URL. Once chatbucket.chat DNS is set up in Cloudflare, add the validation +
 # app records, set enable_https = true, and re-apply to serve https on the
 # domain.
-domain_name            = "app.chatbucket.chat"
-enable_https           = false
+domain_name            = "voiceagent.chatbucket.chat"
+enable_https           = true
 create_route53_records = false
 create_turn_dns        = false # TURN_HOST uses the coturn Elastic IP directly
 
