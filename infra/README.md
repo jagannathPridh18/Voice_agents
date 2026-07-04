@@ -50,34 +50,25 @@ terraform apply -var-file=prod.tfvars
 
 ### 4. Wire GitHub repo variables (Settings → Secrets and variables → Actions → Variables)
 
-From `terraform output`:
+The single `CI/CD (AWS)` pipeline reads most values from `terraform output`, so only **5 variables** are needed:
 
 | Variable | Source |
 | --- | --- |
 | `AWS_REGION` | your region |
+| `AWS_TERRAFORM_ROLE_ARN` | `github_terraform_role_arn` |
 | `TF_STATE_BUCKET` | bootstrap `state_bucket` |
 | `TF_LOCK_TABLE` | bootstrap `lock_table` |
 | `TF_STATE_KEY` | `prod/terraform.tfstate` |
-| `AWS_TERRAFORM_ROLE_ARN` | `github_terraform_role_arn` |
-| `AWS_DEPLOY_ROLE_ARN` | `github_deploy_role_arn` |
-| `ECR_API_REPO` | `ecr_api_repository_url` |
-| `ECR_UI_REPO` | `ecr_ui_repository_url` |
-| `ECS_CLUSTER` | `ecs_cluster_name` |
-| `NAME_PREFIX` | `dograh-prod` (project-environment) |
-| `ECS_SUBNETS` | `ecs_run_task_network.subnets` joined by commas |
-| `ECS_SECURITY_GROUP` | `ecs_run_task_network.security_groups[0]` |
-| `SLACK_ENABLED` | `true`/`false` (optional) |
 
-Also create a GitHub **Environment** named `production` (optionally with required reviewers) so infra `apply` and app deploys are gated.
+Optional: `PIPECAT_TOKEN` secret (PAT with read access to the private pipecat submodule). Also create a GitHub **Environment** named `production` (optionally with required reviewers) so the `infra` job is gated.
 
-### 5. First deploy
+### 5. Run the pipeline
 
-Run the **Deploy to AWS (ECS)** workflow (`workflow_dispatch`). It builds images → ECR, runs the DB migration task (`alembic upgrade head`, which also `CREATE EXTENSION vector`), then rolls the services.
+Run the **CI/CD (AWS)** workflow (`gh workflow run "CI/CD (AWS)"`), or just push to `main`. One flow runs: validate → infra (terraform apply) → build images → migrate (`alembic upgrade head`, incl. `CREATE EXTENSION vector`) → roll services.
 
 ## Day-2 flow
 
-- **Infra changes**: edit `infra/terraform/**`, open a PR → the Terraform workflow posts a `plan`; merge to `main` → gated `apply`.
-- **App changes**: cut a GitHub Release → the deploy workflow builds, migrates, and rolls services with zero-downtime.
+Push to `main` (touching `api/**`, `ui/**`, or `infra/terraform/**`) — the single **CI/CD (AWS)** pipeline validates, applies infra, builds images, migrates, and rolls services end-to-end. `infra` is gated behind the `production` environment for approval.
 
 ## Populating optional secrets
 

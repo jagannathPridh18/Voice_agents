@@ -118,8 +118,9 @@ module "coturn" {
 module "dns" {
   source = "./modules/dns"
 
-  domain_name     = var.domain_name
-  route53_zone_id = var.route53_zone_id
+  domain_name            = var.domain_name
+  route53_zone_id        = var.route53_zone_id
+  create_route53_records = var.create_route53_records
 }
 
 # ---------------------------------------------------------------------------
@@ -235,6 +236,7 @@ module "observability" {
 # DNS records (created here to avoid dns <-> ecs/coturn cycles)
 # ---------------------------------------------------------------------------
 resource "aws_route53_record" "app" {
+  count   = var.create_route53_records ? 1 : 0
   zone_id = var.route53_zone_id
   name    = var.domain_name
   type    = "A"
@@ -247,7 +249,7 @@ resource "aws_route53_record" "app" {
 }
 
 resource "aws_route53_record" "turn" {
-  count   = var.create_turn_dns ? 1 : 0
+  count   = var.create_route53_records && var.create_turn_dns ? 1 : 0
   zone_id = var.route53_zone_id
   name    = local.turn_fqdn
   type    = "A"

@@ -14,8 +14,21 @@ output "region" {
 }
 
 output "alb_dns_name" {
-  description = "ALB DNS name (target of the app A record)."
+  description = "ALB DNS name. Point app record (CNAME app.<domain>) here at your DNS provider."
   value       = module.ecs.alb_dns_name
+}
+
+output "acm_validation_records" {
+  description = "DNS record(s) to add at your DNS provider (Cloudflare) to validate the ACM cert."
+  value       = module.dns.domain_validation_options
+}
+
+output "cloudflare_setup" {
+  description = "Records to create in Cloudflare for external-DNS deployments."
+  value = var.create_route53_records ? "managed in Route53" : join("\n", concat(
+    [for r in module.dns.domain_validation_options : "1) CNAME (DNS-only)  ${r.name} -> ${r.value}"],
+    ["2) CNAME (DNS-only)  ${var.domain_name} -> ${module.ecs.alb_dns_name}"],
+  ))
 }
 
 output "ecr_api_repository_url" {

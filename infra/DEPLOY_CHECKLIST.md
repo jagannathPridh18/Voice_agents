@@ -70,63 +70,42 @@ gh api --method PUT repos/jagannathPridh18/Voice_agents/environments/production
 
 ---
 
-## 5. Set the repo variables + secret  **[admin]**
+## 5. Set the repo variables  **[admin]**
 
-Run from `infra/terraform` right after a successful apply — this reads the outputs and sets all 13 variables in one pass:
+The single `CI/CD (AWS)` pipeline reads almost everything from `terraform output`, so only **5 variables** are needed (the deploy role, ECR repos, cluster, subnets, SG, and name prefix all flow from the infra job's outputs):
 
 ```bash
-cd infra/terraform
-TF=$(terraform output -json)
-val() { echo "$TF" | jq -r "$1"; }
+gh variable set AWS_REGION             --body "ap-south-1"
+gh variable set AWS_TERRAFORM_ROLE_ARN --body "$(cd infra/terraform && terraform output -raw github_terraform_role_arn)"
+gh variable set TF_STATE_BUCKET        --body "$(cd bootstrap/terraform && terraform output -raw state_bucket)"
+gh variable set TF_LOCK_TABLE          --body "$(cd bootstrap/terraform && terraform output -raw lock_table)"
+gh variable set TF_STATE_KEY           --body "prod/terraform.tfstate"
 
-gh variable set AWS_REGION             --body "$(val .region.value)"
-gh variable set NAME_PREFIX            --body "$(val .name_prefix.value)"
-gh variable set AWS_TERRAFORM_ROLE_ARN --body "$(val .github_terraform_role_arn.value)"
-gh variable set AWS_DEPLOY_ROLE_ARN    --body "$(val .github_deploy_role_arn.value)"
-gh variable set ECR_API_REPO           --body "$(val .ecr_api_repository_url.value)"
-gh variable set ECR_UI_REPO            --body "$(val .ecr_ui_repository_url.value)"
-gh variable set ECS_CLUSTER            --body "$(val .ecs_cluster_name.value)"
-gh variable set ECS_SUBNETS            --body "$(val '.ecs_run_task_network.value.subnets | join(",")')"
-gh variable set ECS_SECURITY_GROUP     --body "$(val '.ecs_run_task_network.value.security_groups[0]')"
-
-# State backend (from the bootstrap root)
-gh variable set TF_STATE_BUCKET --body "$(cd ../../bootstrap/terraform && terraform output -raw state_bucket)"
-gh variable set TF_LOCK_TABLE   --body "$(cd ../../bootstrap/terraform && terraform output -raw lock_table)"
-gh variable set TF_STATE_KEY    --body "prod/terraform.tfstate"
-
-# Slack (optional). Leave false to skip Slack notifications.
-gh variable set SLACK_ENABLED --body "false"
-# gh secret set SLACK_WEBHOOK_URL --body "https://hooks.slack.com/services/..."
+# Optional: PAT with read access to the private pipecat submodule (for the build job)
+# gh secret set PIPECAT_TOKEN --body "ghp_..."
 ```
 
-- [ ] `gh variable list` shows all 13 variables.
+- [ ] `gh variable list` shows the 5 variables.
 
 | Variable | Source |
 | --- | --- |
-| `AWS_REGION` | output `region` |
-| `NAME_PREFIX` | output `name_prefix` (`dograh-prod`) |
+| `AWS_REGION` | your region (`ap-south-1`) |
 | `AWS_TERRAFORM_ROLE_ARN` | output `github_terraform_role_arn` |
-| `AWS_DEPLOY_ROLE_ARN` | output `github_deploy_role_arn` |
-| `ECR_API_REPO` / `ECR_UI_REPO` | outputs `ecr_*_repository_url` |
-| `ECS_CLUSTER` | output `ecs_cluster_name` |
-| `ECS_SUBNETS` | output `ecs_run_task_network.subnets` (comma-joined) |
-| `ECS_SECURITY_GROUP` | output `ecs_run_task_network.security_groups[0]` |
 | `TF_STATE_BUCKET` / `TF_LOCK_TABLE` | bootstrap outputs |
 | `TF_STATE_KEY` | `prod/terraform.tfstate` |
-| `SLACK_ENABLED` | `true`/`false` |
 
 ---
 
-## 6. First deploy (build images → migrate → start services)
+## 6. Run the pipeline (single flow: infra → build → migrate → deploy)
 
 ```bash
-gh workflow run "Deploy to AWS (ECS)"
-gh run watch "$(gh run list --workflow='Deploy to AWS (ECS)' --limit 1 --json databaseId --jq '.[0].databaseId')"
+gh workflow run "CI/CD (AWS)"
+gh run watch "$(gh run list --workflow='CI/CD (AWS)' --limit 1 --json databaseId --jq '.[0].databaseId')"
 ```
 
-The workflow: builds `api`+`ui` images → ECR, runs the migration task (`alembic upgrade head`, which also `CREATE EXTENSION vector`), then rolls all five services and waits for `services-stable`.
+One pipeline runs: `validate` → `infra` (terraform apply) → `build` (images → ECR) → `deploy` (migration `alembic upgrade head` incl. `CREATE EXTENSION vector`, then rolls all five services and waits for `services-stable`). It also runs automatically on every push to `main`.
 
-- [ ] Run is green; `aws ecs wait services-stable` passed.
+- [ ] Pipeline is green through the `deploy` job.
 
 ---
 

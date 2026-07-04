@@ -49,8 +49,15 @@ variable "domain_name" {
 }
 
 variable "route53_zone_id" {
-  description = "Route53 hosted zone ID that owns domain_name (used for ACM validation + the app record)."
+  description = "Route53 hosted zone ID that owns domain_name (only used when create_route53_records = true)."
   type        = string
+  default     = ""
+}
+
+variable "create_route53_records" {
+  description = "Manage DNS in Route53. Set false for external DNS (e.g. Cloudflare) — you add the cert-validation + app records at your provider."
+  type        = bool
+  default     = true
 }
 
 variable "create_turn_dns" {
