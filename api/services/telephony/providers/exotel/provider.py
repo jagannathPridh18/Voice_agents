@@ -112,9 +112,7 @@ class ExotelProvider(TelephonyProvider):
             from_number = random.choice(self.from_numbers)
 
         backend_endpoint, _ = await get_backend_endpoints()
-        flow_url = (
-            f"http://my.exotel.com/{self.account_sid}/exoml/start_voice/{self.flow_app_id}"
-        )
+        flow_url = f"http://my.exotel.com/{self.account_sid}/exoml/start_voice/{self.flow_app_id}"
 
         # Exotel APIs are form-encoded.
         data: Dict[str, Any] = {
@@ -198,7 +196,11 @@ class ExotelProvider(TelephonyProvider):
                     # positive float; currency is not necessarily USD.
                     raw_price = call.get("Price")
                     try:
-                        cost = abs(float(raw_price)) if raw_price not in (None, "") else 0.0
+                        cost = (
+                            abs(float(raw_price))
+                            if raw_price not in (None, "")
+                            else 0.0
+                        )
                     except (TypeError, ValueError):
                         cost = 0.0
                     duration = int(call.get("Duration") or 0)
@@ -279,7 +281,9 @@ class ExotelProvider(TelephonyProvider):
             try:
                 msg = json.loads(raw)
             except json.JSONDecodeError:
-                logger.warning(f"[Exotel] non-JSON ws message during handshake: {raw!r}")
+                logger.warning(
+                    f"[Exotel] non-JSON ws message during handshake: {raw!r}"
+                )
                 continue
             event = msg.get("event")
             if event == "connected":
@@ -314,7 +318,9 @@ class ExotelProvider(TelephonyProvider):
 
         start = await self.read_start_event(websocket)
         if not start or not start.get("stream_sid"):
-            logger.error(f"[Exotel] missing/invalid start event for run {workflow_run_id}")
+            logger.error(
+                f"[Exotel] missing/invalid start event for run {workflow_run_id}"
+            )
             await websocket.close(code=4400, reason="Missing start event")
             return
 
@@ -433,9 +439,7 @@ class ExotelProvider(TelephonyProvider):
             "URL from the Voicebot applet, not a Dograh markup response."
         )
         _, wss_backend_endpoint = await get_backend_endpoints()
-        return json.dumps(
-            {"url": f"{wss_backend_endpoint}/api/v1/telephony/exotel/ws"}
-        )
+        return json.dumps({"url": f"{wss_backend_endpoint}/api/v1/telephony/exotel/ws"})
 
     @staticmethod
     def generate_error_response(error_type: str, message: str) -> tuple:
