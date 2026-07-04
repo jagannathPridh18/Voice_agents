@@ -5,7 +5,9 @@ name: Regenerate OpenAPI (temp)
 # back to the branch. Removed after use.
 
 on:
-  workflow_dispatch:
+  push:
+    branches: [feat/aws-ecs-terraform-cicd]
+    paths: [".github/workflows/regen-openapi.yml"]
 
 permissions:
   contents: write
