@@ -254,6 +254,13 @@ resource "aws_iam_policy" "tf_data" {
           "kms:ReEncryptFrom", "kms:ReEncryptTo", "kms:CreateGrant", "kms:RetireGrant",
         ]
       },
+      {
+        Sid       = "Efs"
+        Effect    = "Allow"
+        Condition = local.tf_region_lock
+        Resource  = "*"
+        Action    = ["elasticfilesystem:*"]
+      },
     ]
   })
 }

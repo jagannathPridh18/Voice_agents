@@ -104,3 +104,17 @@ variable "app_secrets" {
   description = "name => Secrets Manager ARN, injected as container secrets."
   type        = map(string)
 }
+
+variable "efs_file_system_id" {
+  type = string
+}
+
+variable "efs_access_point_id" {
+  type = string
+}
+
+variable "recordings_dir" {
+  description = "Container mount path for the shared EFS (recordings exchange between api and worker)."
+  type        = string
+  default     = "/mnt/shared"
+}

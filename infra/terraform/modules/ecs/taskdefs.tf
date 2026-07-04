@@ -2,6 +2,10 @@ locals {
   app_env_list = [for k, v in var.app_env : { name = k, value = v }]
   ui_env_list  = [for k, v in var.ui_env : { name = k, value = v }]
 
+  # api + worker also get the shared-recordings dir env + EFS mount.
+  recordings_env    = concat(local.app_env_list, [{ name = "RECORDINGS_SHARED_DIR", value = var.recordings_dir }])
+  recordings_mounts = [{ sourceVolume = "shared-recordings", containerPath = var.recordings_dir }]
+
   secrets_all      = [for k, v in var.app_secrets : { name = k, valueFrom = v }]
   secrets_db_redis = [for k in ["DATABASE_URL", "REDIS_URL"] : { name = k, valueFrom = var.app_secrets[k] }]
   secrets_worker   = [for k in ["DATABASE_URL", "REDIS_URL", "OSS_JWT_SECRET"] : { name = k, valueFrom = var.app_secrets[k] }]
@@ -30,13 +34,26 @@ resource "aws_ecs_task_definition" "api" {
   execution_role_arn       = var.execution_role_arn
   task_role_arn            = var.api_task_role_arn
 
+  volume {
+    name = "shared-recordings"
+    efs_volume_configuration {
+      file_system_id     = var.efs_file_system_id
+      transit_encryption = "ENABLED"
+      authorization_config {
+        access_point_id = var.efs_access_point_id
+        iam             = "DISABLED"
+      }
+    }
+  }
+
   container_definitions = jsonencode([{
     name             = "api"
     image            = var.api_image
     essential        = true
     command          = ["uvicorn", "api.app:app", "--host", "0.0.0.0", "--port", tostring(var.api_port), "--workers", tostring(var.uvicorn_workers)]
-    environment      = local.app_env_list
+    environment      = local.recordings_env
     secrets          = local.secrets_all
+    mountPoints      = local.recordings_mounts
     portMappings     = [{ containerPort = var.api_port, protocol = "tcp" }]
     logConfiguration = local.logcfg["api"]
   }])
@@ -72,13 +89,26 @@ resource "aws_ecs_task_definition" "worker" {
   execution_role_arn       = var.execution_role_arn
   task_role_arn            = var.api_task_role_arn
 
+  volume {
+    name = "shared-recordings"
+    efs_volume_configuration {
+      file_system_id     = var.efs_file_system_id
+      transit_encryption = "ENABLED"
+      authorization_config {
+        access_point_id = var.efs_access_point_id
+        iam             = "DISABLED"
+      }
+    }
+  }
+
   container_definitions = jsonencode([{
     name             = "worker"
     image            = var.api_image
     essential        = true
     command          = ["python", "-m", "arq", "api.tasks.arq.WorkerSettings", "--custom-log-dict", "api.tasks.arq.LOG_CONFIG"]
-    environment      = local.app_env_list
+    environment      = local.recordings_env
     secrets          = local.secrets_worker
+    mountPoints      = local.recordings_mounts
     logConfiguration = local.logcfg["worker"]
   }])
 }

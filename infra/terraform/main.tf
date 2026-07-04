@@ -90,6 +90,18 @@ module "ecr" {
 }
 
 # ---------------------------------------------------------------------------
+# Shared filesystem (EFS) — api writes recordings, worker uploads them
+# ---------------------------------------------------------------------------
+module "efs" {
+  source = "./modules/efs"
+
+  name_prefix        = local.name_prefix
+  vpc_id             = module.network.vpc_id
+  private_subnet_ids = module.network.private_subnet_ids
+  allowed_sg_id      = module.security.ecs_service_sg_id
+}
+
+# ---------------------------------------------------------------------------
 # coturn (TURN server) on EC2 + Elastic IP
 # ---------------------------------------------------------------------------
 module "coturn" {
@@ -156,6 +168,11 @@ module "ecs" {
 
   enable_https    = var.enable_https
   certificate_arn = var.enable_https ? module.dns.certificate_arn : ""
+
+  # Shared EFS for call recordings (api writes, worker uploads).
+  efs_file_system_id  = module.efs.file_system_id
+  efs_access_point_id = module.efs.access_point_id
+  recordings_dir      = "/mnt/shared"
 
   # Sizing
   api_cpu              = var.api_cpu
