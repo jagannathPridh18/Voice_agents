@@ -3,6 +3,7 @@
 import sentry_sdk
 
 from api.constants import (
+    BACKEND_API_ENDPOINT,
     CORS_ALLOWED_ORIGINS,
     DEPLOYMENT_MODE,
     ENABLE_TELEMETRY,
@@ -80,8 +81,14 @@ app = FastAPI(
     description="API for the Dograh app",
     version="1.0.0",
     openapi_url=f"{API_PREFIX}/openapi.json",
+    # Serve the interactive docs under the /api/v1 prefix so they're routed to
+    # the API service (the ALB forwards /api/v1/* here); the default /docs would
+    # go to the UI instead.
+    docs_url=f"{API_PREFIX}/docs",
+    redoc_url=f"{API_PREFIX}/redoc",
     lifespan=lifespan,
     servers=[
+        {"url": BACKEND_API_ENDPOINT, "description": "This deployment"},
         {"url": "https://app.dograh.com", "description": "Production"},
         {"url": "http://localhost:8000", "description": "Local development"},
     ],
