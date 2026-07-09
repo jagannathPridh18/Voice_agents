@@ -6,7 +6,6 @@ from typing import List, Literal, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import StreamingResponse
-from httpx import HTTPStatusError
 from loguru import logger
 from pydantic import BaseModel, Field, ValidationError
 
@@ -30,7 +29,10 @@ from api.services.configuration.resolve import (
     enrich_overrides_with_api_keys,
     resolve_effective_config,
 )
-from api.services.mps_service_key_client import mps_service_key_client
+from api.services.workflow.template_generation import (
+    WorkflowGenerationError,
+    generate_workflow_from_template,
+)
 from api.services.posthog_client import capture_event
 from api.services.pricing.run_usage_response import format_public_usage_info
 from api.services.reports import generate_workflow_report_csv
@@ -430,10 +432,11 @@ async def create_workflow_from_template(
     """
     Create a new workflow from a natural language template request.
 
-    This endpoint:
-    1. Uses mps_service_key_client to call MPS workflow API
-    2. Passes organization ID (authenticated mode) or created_by (OSS mode)
-    3. Creates the workflow in the database
+    Generation runs locally against the user's *selected* LLM — the provider,
+    model, and API key from their model configuration (`UserConfiguration.llm`).
+    The model emits `@dograh/sdk` TypeScript which is validated via the TS
+    bridge into a workflow definition. See
+    `api.services.workflow.template_generation`.
 
     Args:
         request: The template creation request with call_type, use_case, and activity_description
@@ -443,33 +446,22 @@ async def create_workflow_from_template(
         The created workflow
 
     Raises:
-        HTTPException: If MPS API call fails
+        HTTPException: If no LLM is configured or generation fails validation.
     """
+    if DEPLOYMENT_MODE != "oss" and not user.selected_organization_id:
+        raise HTTPException(status_code=400, detail="No organization selected")
+
     try:
-        # Call MPS API to generate workflow using the client
-        if DEPLOYMENT_MODE == "oss":
-            workflow_data = await mps_service_key_client.call_workflow_api(
-                call_type=request.call_type.upper(),
-                use_case=request.use_case,
-                activity_description=request.activity_description,
-                created_by=str(user.provider_id),
-            )
-        else:
-            if not user.selected_organization_id:
-                raise HTTPException(status_code=400, detail="No organization selected")
-
-            workflow_data = await mps_service_key_client.call_workflow_api(
-                call_type=request.call_type.upper(),
-                use_case=request.use_case,
-                activity_description=request.activity_description,
-                organization_id=user.selected_organization_id,
-            )
-
-        # Create the workflow in our database
-        # Regenerate trigger UUIDs to avoid conflicts with existing triggers
-        workflow_def = regenerate_trigger_uuids(
-            workflow_data.get("workflow_definition", {})
+        # Generate the workflow with the user's own configured LLM.
+        workflow_name, generated_def = await generate_workflow_from_template(
+            call_type=request.call_type.upper(),
+            use_case=request.use_case,
+            activity_description=request.activity_description,
+            user_id=user.id,
         )
+
+        # Regenerate trigger UUIDs to avoid conflicts with existing triggers
+        workflow_def = regenerate_trigger_uuids(generated_def)
 
         trigger_paths = extract_trigger_paths(workflow_def) if workflow_def else []
         if trigger_paths:
@@ -481,7 +473,7 @@ async def create_workflow_from_template(
                 raise HTTPException(status_code=409, detail=str(e))
 
         workflow = await db_client.create_workflow(
-            name=workflow_data.get("name", f"{request.use_case} - {request.call_type}"),
+            name=workflow_name,
             workflow_definition=workflow_def,
             user_id=user.id,
             organization_id=user.selected_organization_id,
@@ -523,12 +515,9 @@ async def create_workflow_from_template(
 
     except HTTPException:
         raise
-    except HTTPStatusError as e:
-        logger.error(f"MPS API error: {e}")
-        raise HTTPException(
-            status_code=e.response.status_code if hasattr(e, "response") else 500,
-            detail=str(e),
-        )
+    except WorkflowGenerationError as e:
+        logger.error(f"Workflow generation failed: {e}")
+        raise HTTPException(status_code=422, detail=str(e))
     except Exception as e:
         logger.error(f"Unexpected error creating workflow from template: {e}")
         raise HTTPException(
