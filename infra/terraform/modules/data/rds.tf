@@ -67,4 +67,14 @@ resource "aws_db_instance" "this" {
   copy_tags_to_snapshot        = true
 
   tags = { Name = "${var.name_prefix}-pg" }
+
+  lifecycle {
+    # RDS applies automatic minor-version upgrades (auto_minor_version_upgrade
+    # above), so the live engine_version drifts ahead of the pinned
+    # var.db_engine_version (e.g. AWS bumped 16.9 -> 16.13). Ignore that drift so
+    # apply doesn't try to "downgrade" the minor version, which AWS rejects:
+    # "Cannot upgrade postgres from 16.13 to 16.9". An intentional version change
+    # must be made out-of-band (temporarily remove this or use modify-db-instance).
+    ignore_changes = [engine_version]
+  }
 }
