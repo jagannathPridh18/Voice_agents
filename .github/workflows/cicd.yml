@@ -1,0 +1,228 @@
+name: CI/CD (AWS)
+
+# Single end-to-end pipeline:
+#   validate -> infra (terraform apply) -> build (images -> ECR) -> deploy
+#              (migrate + roll ECS services)
+# The infra job's terraform outputs feed the build/deploy jobs, so the only
+# repo variables needed are: AWS_REGION, AWS_TERRAFORM_ROLE_ARN, TF_STATE_BUCKET,
+# TF_LOCK_TABLE, TF_STATE_KEY (+ optional PIPECAT_TOKEN secret for the private
+# pipecat submodule). Everything else (deploy role, ECR repos, cluster, subnets,
+# SG, name prefix) is read from terraform output.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "api/**"
+      - "ui/**"
+      - "infra/terraform/**"
+      - ".github/workflows/cicd.yml"
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: "Image tag (default: sha-<short>)."
+        required: false
+        type: string
+
+permissions:
+  id-token: write # OIDC
+  contents: read
+
+concurrency:
+  group: cicd-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  TF_VERSION: "1.9.8"
+  WORKDIR: infra/terraform
+  # Non-secret config with fallbacks, so the pipeline runs without any
+  # admin-set repo variables. Set repo Variables to override any of these.
+  AWS_REGION: ${{ vars.AWS_REGION || 'ap-south-1' }}
+  TF_ROLE: ${{ vars.AWS_TERRAFORM_ROLE_ARN || 'arn:aws:iam::637560253183:role/dograh-prod-gha-terraform' }}
+  TF_STATE_BUCKET: ${{ vars.TF_STATE_BUCKET || 'dograh-tf-state-637560253183' }}
+  TF_LOCK_TABLE: ${{ vars.TF_LOCK_TABLE || 'dograh-tf-locks' }}
+  TF_STATE_KEY: ${{ vars.TF_STATE_KEY || 'prod/terraform.tfstate' }}
+
+jobs:
+  # 1) Terraform fmt + validate — no AWS, runs on every trigger.
+  validate:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ${{ env.WORKDIR }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+      - run: terraform fmt -check -recursive
+      - run: terraform init -backend=false -input=false
+      - run: terraform validate
+
+  # 2) Provision/update infrastructure and export outputs for downstream jobs.
+  infra:
+    needs: validate
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ${{ env.WORKDIR }}
+    outputs:
+      region: ${{ steps.out.outputs.region }}
+      name_prefix: ${{ steps.out.outputs.name_prefix }}
+      cluster: ${{ steps.out.outputs.cluster }}
+      api_repo: ${{ steps.out.outputs.api_repo }}
+      ui_repo: ${{ steps.out.outputs.ui_repo }}
+      deploy_role: ${{ steps.out.outputs.deploy_role }}
+      subnets: ${{ steps.out.outputs.subnets }}
+      sg: ${{ steps.out.outputs.sg }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ env.TF_ROLE }}
+          aws-region: ${{ env.AWS_REGION }}
+      - name: Init
+        run: |
+          terraform init \
+            -backend-config="bucket=${{ env.TF_STATE_BUCKET }}" \
+            -backend-config="dynamodb_table=${{ env.TF_LOCK_TABLE }}" \
+            -backend-config="region=${{ env.AWS_REGION }}" \
+            -backend-config="key=${{ env.TF_STATE_KEY }}"
+      - name: Apply
+        run: terraform apply -var-file=prod.tfvars -auto-approve
+      - name: Export outputs
+        id: out
+        run: |
+          TF=$(terraform output -json)
+          v() { echo "$TF" | jq -r "$1"; }
+          {
+            echo "region=$(v .region.value)"
+            echo "name_prefix=$(v .name_prefix.value)"
+            echo "cluster=$(v .ecs_cluster_name.value)"
+            echo "api_repo=$(v .ecr_api_repository_url.value)"
+            echo "ui_repo=$(v .ecr_ui_repository_url.value)"
+            echo "deploy_role=$(v .github_deploy_role_arn.value)"
+            echo "subnets=$(v '.ecs_run_task_network.value.subnets | join(",")')"
+            echo "sg=$(v '.ecs_run_task_network.value.security_groups[0]')"
+          } >> "$GITHUB_OUTPUT"
+
+  # 3) Build + push images to ECR (uses the deploy role from the infra outputs).
+  build:
+    needs: infra
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.tag.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+          token: ${{ secrets.PIPECAT_TOKEN || secrets.GITHUB_TOKEN }}
+      - name: Compute tag
+        id: tag
+        run: |
+          if [ "${{ github.event_name }}" = "release" ]; then
+            TAG="${{ github.event.release.tag_name }}"; TAG="${TAG#dograh-}"; TAG="${TAG#v}"
+          else
+            TAG="${{ inputs.image_tag }}"; [ -z "$TAG" ] && TAG="sha-${GITHUB_SHA::8}"
+          fi
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ needs.infra.outputs.deploy_role }}
+          aws-region: ${{ needs.infra.outputs.region }}
+      - uses: aws-actions/amazon-ecr-login@v2
+      - uses: docker/setup-buildx-action@v3
+      - name: Build & push api
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: api/Dockerfile
+          platforms: linux/amd64
+          push: true
+          tags: |
+            ${{ needs.infra.outputs.api_repo }}:${{ steps.tag.outputs.tag }}
+            ${{ needs.infra.outputs.api_repo }}:latest
+          cache-from: type=gha,scope=api
+          cache-to: type=gha,mode=max,scope=api
+      - name: Build & push ui
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ui/Dockerfile
+          platforms: linux/amd64
+          push: true
+          tags: |
+            ${{ needs.infra.outputs.ui_repo }}:${{ steps.tag.outputs.tag }}
+            ${{ needs.infra.outputs.ui_repo }}:latest
+          cache-from: type=gha,scope=ui
+          cache-to: type=gha,mode=max,scope=ui
+
+  # 4) Migrate DB, then roll all services to the new images.
+  deploy:
+    needs: [infra, build]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ needs.infra.outputs.deploy_role }}
+          aws-region: ${{ needs.infra.outputs.region }}
+      - name: Register task defs
+        id: reg
+        env:
+          NAME_PREFIX: ${{ needs.infra.outputs.name_prefix }}
+          API_REPO: ${{ needs.infra.outputs.api_repo }}
+          UI_REPO: ${{ needs.infra.outputs.ui_repo }}
+          TAG: ${{ needs.build.outputs.tag }}
+        run: |
+          set -euo pipefail
+          register() {
+            local family="$1" image="$2" td new
+            td=$(aws ecs describe-task-definition --task-definition "$family" --query 'taskDefinition' --output json)
+            new=$(echo "$td" | jq --arg IMAGE "$image" '
+              .containerDefinitions[0].image=$IMAGE
+              | del(.taskDefinitionArn,.revision,.status,.requiresAttributes,.compatibilities,.registeredAt,.registeredBy)')
+            aws ecs register-task-definition --cli-input-json "$new" --query 'taskDefinition.taskDefinitionArn' --output text
+          }
+          API_IMAGE="${API_REPO}:${TAG}"; UI_IMAGE="${UI_REPO}:${TAG}"
+          {
+            echo "api=$(register "${NAME_PREFIX}-api" "$API_IMAGE")"
+            echo "worker=$(register "${NAME_PREFIX}-worker" "$API_IMAGE")"
+            echo "telephony=$(register "${NAME_PREFIX}-telephony" "$API_IMAGE")"
+            echo "orchestrator=$(register "${NAME_PREFIX}-orchestrator" "$API_IMAGE")"
+            echo "migrate=$(register "${NAME_PREFIX}-migrate" "$API_IMAGE")"
+            echo "ui=$(register "${NAME_PREFIX}-ui" "$UI_IMAGE")"
+          } >> "$GITHUB_OUTPUT"
+      - name: Run DB migration
+        env:
+          CLUSTER: ${{ needs.infra.outputs.cluster }}
+          SUBNETS: ${{ needs.infra.outputs.subnets }}
+          SG: ${{ needs.infra.outputs.sg }}
+        run: |
+          set -euo pipefail
+          TASK_ARN=$(aws ecs run-task --cluster "$CLUSTER" \
+            --task-definition "${{ steps.reg.outputs.migrate }}" --launch-type FARGATE \
+            --network-configuration "awsvpcConfiguration={subnets=[$SUBNETS],securityGroups=[$SG],assignPublicIp=DISABLED}" \
+            --query 'tasks[0].taskArn' --output text)
+          aws ecs wait tasks-stopped --cluster "$CLUSTER" --tasks "$TASK_ARN"
+          EXIT=$(aws ecs describe-tasks --cluster "$CLUSTER" --tasks "$TASK_ARN" --query 'tasks[0].containers[0].exitCode' --output text)
+          echo "migration exit=$EXIT"; [ "$EXIT" = "0" ] || { echo "::error::migration failed"; exit 1; }
+      - name: Roll services
+        env:
+          CLUSTER: ${{ needs.infra.outputs.cluster }}
+          NAME_PREFIX: ${{ needs.infra.outputs.name_prefix }}
+        run: |
+          set -euo pipefail
+          u() { aws ecs update-service --cluster "$CLUSTER" --service "$1" --task-definition "$2" >/dev/null; }
+          u "${NAME_PREFIX}-api"          "${{ steps.reg.outputs.api }}"
+          u "${NAME_PREFIX}-ui"           "${{ steps.reg.outputs.ui }}"
+          u "${NAME_PREFIX}-worker"       "${{ steps.reg.outputs.worker }}"
+          u "${NAME_PREFIX}-telephony"    "${{ steps.reg.outputs.telephony }}"
+          u "${NAME_PREFIX}-orchestrator" "${{ steps.reg.outputs.orchestrator }}"
+          aws ecs wait services-stable --cluster "$CLUSTER" --services \
+            "${NAME_PREFIX}-api" "${NAME_PREFIX}-ui" "${NAME_PREFIX}-worker" \
+            "${NAME_PREFIX}-telephony" "${NAME_PREFIX}-orchestrator"

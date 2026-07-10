@@ -1,10 +1,17 @@
 import asyncio
+import os
 import tempfile
 import wave
 from datetime import UTC, datetime
 from typing import List, Optional
 
 from loguru import logger
+
+# Recordings/transcripts are written here and later uploaded by the ARQ worker.
+# On a split deployment (separate api/worker tasks/containers), the worker runs
+# on a different filesystem, so point these at a shared mount (e.g. EFS) via
+# RECORDINGS_SHARED_DIR. Unset => system temp dir (single-container / shared /tmp).
+_SHARED_TMP_DIR = os.getenv("RECORDINGS_SHARED_DIR") or None
 
 from api.services.pipecat.realtime_feedback_events import (
     realtime_feedback_event_sort_key,
@@ -44,7 +51,9 @@ class InMemoryAudioBuffer:
     async def write_to_temp_file(self) -> str:
         """Write audio data to a temporary WAV file and return the path."""
         async with self._lock:
-            temp_file = tempfile.NamedTemporaryFile(suffix=".wav", delete=False)
+            temp_file = tempfile.NamedTemporaryFile(
+                suffix=".wav", delete=False, dir=_SHARED_TMP_DIR
+            )
             logger.debug(
                 f"Writing audio buffer to temp file {temp_file.name} for workflow {self._workflow_run_id}"
             )
@@ -160,7 +169,9 @@ class InMemoryLogsBuffer:
         if not content:
             return None
 
-        temp_file = tempfile.NamedTemporaryFile(mode="w", suffix=".txt", delete=False)
+        temp_file = tempfile.NamedTemporaryFile(
+            mode="w", suffix=".txt", delete=False, dir=_SHARED_TMP_DIR
+        )
         logger.debug(
             f"Writing transcript to temp file {temp_file.name} for workflow {self._workflow_run_id}"
         )

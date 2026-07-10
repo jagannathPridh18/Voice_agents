@@ -1,0 +1,46 @@
+#!/bin/bash
+set -euxo pipefail
+
+# --- Docker ---------------------------------------------------------------
+dnf install -y docker
+systemctl enable --now docker
+
+# --- Fetch the shared TURN secret from Secrets Manager --------------------
+TURN_SECRET="$(aws secretsmanager get-secret-value \
+  --region ${region} \
+  --secret-id ${turn_secret_arn} \
+  --query SecretString --output text)"
+
+PRIVATE_IP="$(curl -s http://169.254.169.254/latest/meta-data/local-ipv4)"
+
+# --- coturn config --------------------------------------------------------
+# Time-limited credentials (TURN REST API / HMAC-SHA1) — the api service mints
+# them with the same shared secret. external-ip maps the Elastic IP to the
+# instance's private IP for correct relay candidate advertisement behind NAT.
+mkdir -p /etc/coturn
+cat >/etc/coturn/turnserver.conf <<EOF
+listening-port=3478
+min-port=${relay_port_min}
+max-port=${relay_port_max}
+use-auth-secret
+static-auth-secret=$TURN_SECRET
+realm=${realm}
+external-ip=${eip}
+fingerprint
+no-cli
+no-tls
+no-dtls
+stale-nonce=600
+log-file=stdout
+verbose
+EOF
+
+# --- Run coturn, shipping logs straight to CloudWatch ---------------------
+docker run -d --name coturn --restart unless-stopped --network host \
+  --log-driver=awslogs \
+  --log-opt awslogs-region=${region} \
+  --log-opt awslogs-group=${log_group} \
+  --log-opt awslogs-create-group=true \
+  --log-opt awslogs-stream=coturn \
+  -v /etc/coturn/turnserver.conf:/etc/coturn/turnserver.conf:ro \
+  coturn/coturn:4.8.0 -c /etc/coturn/turnserver.conf

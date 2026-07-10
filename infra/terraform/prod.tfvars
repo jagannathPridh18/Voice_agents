@@ -1,0 +1,50 @@
+# Fill these in for your environment, then:
+#   terraform apply -var-file=prod.tfvars
+# (CI passes -var-file=prod.tfvars automatically.)
+
+project     = "dograh"
+environment = "prod"
+region      = "ap-south-1"
+
+# --- DNS / TLS --------------------------------------------------------------
+# Deploy HTTP-only for now (no DNS dependency); the stack comes up on the ALB
+# URL. Once chatbucket.chat DNS is set up in Cloudflare, add the validation +
+# app records, set enable_https = true, and re-apply to serve https on the
+# domain.
+domain_name            = "voiceagent.chatbucket.chat"
+enable_https           = true
+create_route53_records = false
+create_turn_dns        = false # TURN_HOST uses the coturn Elastic IP directly
+
+# An OIDC provider for GitHub Actions already exists in this account.
+create_github_oidc_provider = false
+
+# --- CI/CD (REQUIRED) -------------------------------------------------------
+# Must match the repo hosting the workflows — this is what the OIDC role trusts.
+github_org  = "jagannathPridh18"
+github_repo = "Voice_agents"
+
+# --- Sizing (tune as needed) ------------------------------------------------
+api_desired_count    = 2
+ui_desired_count     = 2
+worker_desired_count = 1
+db_instance_class    = "db.t3.medium"
+db_engine_version    = "16.9" # ap-south-1 offers 16.9+ (not 16.4)
+redis_node_type      = "cache.t3.micro"
+coturn_instance_type = "t3.small"
+
+# On-demand Standard vCPU quota (16) is maxed, so run coturn on Spot (separate
+# quota, 32 free). Enables WebRTC voice. Spot can be interrupted (rare for
+# t3.small); move to on-demand once the vCPU quota increase is approved.
+deploy_coturn   = true
+coturn_use_spot = true
+
+# --- Ops --------------------------------------------------------------------
+alarm_email        = "" # e.g. "oncall@example.com" to receive alarm emails
+log_retention_days = 30
+enable_telemetry   = false
+
+# Self-hosted OSS mode. Enables the OSS (free-tier, keyed by user) path for the
+# MPS "Agent Builder", and same-origin-safe CORS. `production` flips MPS to the
+# paid org tier that needs a DOGRAH_MPS_SECRET_KEY (→ 401 on self-hosted).
+deployment_mode = "oss"
