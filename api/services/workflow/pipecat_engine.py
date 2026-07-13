@@ -78,6 +78,7 @@ class PipecatEngine:
         embeddings_api_version: Optional[str] = None,
         has_recordings: bool = False,
         context_compaction_enabled: bool = False,
+        language_instruction: Optional[str] = None,
     ):
         self.task = task
         self.llm = llm
@@ -146,6 +147,11 @@ class PipecatEngine:
         # True when the workflow has active recordings; enables recording
         # response mode instructions on all nodes for in-context learning.
         self._has_recordings: bool = has_recordings
+
+        # Per-agent language directive, injected into every node's system
+        # prompt so the LLM converses only in the selected language. None when
+        # no agent language is configured.
+        self._language_instruction: Optional[str] = language_instruction
 
         # Background context summarization on node transitions
         self._context_compaction_enabled: bool = context_compaction_enabled
@@ -536,6 +542,7 @@ class PipecatEngine:
             workflow=self.workflow,
             format_prompt=self._format_prompt,
             has_recordings=self._has_recordings,
+            language_instruction=self._language_instruction,
         )
         functions = await compose_functions_for_node(
             node=node,

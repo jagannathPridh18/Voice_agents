@@ -52,18 +52,22 @@ def compose_system_prompt_for_node(
     workflow: "WorkflowGraph",
     format_prompt: Callable[[str], str],
     has_recordings: bool,
+    language_instruction: Optional[str] = None,
 ) -> str:
     """Compose the full system prompt text for a workflow node.
 
-    Combines the global prompt, node-specific prompt, and (when recordings
-    are enabled anywhere in the workflow) the recording response mode
-    instructions into a single string.
+    Combines the per-agent language directive, the global prompt, the
+    node-specific prompt, and (when recordings are enabled anywhere in the
+    workflow) the recording response mode instructions into a single string.
 
     Args:
         node: The workflow node to compose the prompt for.
         workflow: The full workflow graph (needed for global node prompt).
         format_prompt: Callable to render template variables in prompts.
         has_recordings: Whether any node in the workflow uses recordings.
+        language_instruction: Optional directive forcing the LLM to respond
+            only in the agent's configured language. Placed first so it takes
+            precedence over anything in the node/global prompts.
 
     Returns:
         The composed system prompt text.
@@ -75,7 +79,11 @@ def compose_system_prompt_for_node(
 
     formatted_node_prompt = format_prompt(node.prompt)
 
-    parts = [p for p in (global_prompt, formatted_node_prompt) if p]
+    parts = [
+        p
+        for p in (language_instruction, global_prompt, formatted_node_prompt)
+        if p
+    ]
 
     if has_recordings and "RECORDING_ID:" in formatted_node_prompt:
         parts.append(RECORDING_RESPONSE_MODE_INSTRUCTIONS)

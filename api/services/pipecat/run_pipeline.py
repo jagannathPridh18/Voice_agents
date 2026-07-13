@@ -389,6 +389,17 @@ async def _run_pipeline(
     else:
         user_config = resolved_user_config
 
+    # Apply the per-agent language (if set) onto the resolved STT/TTS/realtime
+    # config so the agent listens and speaks in that language. The matching
+    # LLM directive is injected below via the PipecatEngine. `user_config` is
+    # an owned copy at this point (resolve_effective_config deep-copies, and
+    # callers that pre-resolve pass an owned copy), so mutation is safe.
+    agent_language = run_configs.get("language")
+    if agent_language:
+        from api.services.configuration.language_support import apply_agent_language
+
+        apply_agent_language(user_config, agent_language)
+
     # Detect realtime mode (speech-to-speech services like OpenAI Realtime, Gemini Live)
     is_realtime = user_config.is_realtime and user_config.realtime is not None
 
@@ -528,6 +539,8 @@ async def _run_pipeline(
         logger.info("Disabling context_compaction_enabled for realtime workflow run")
         context_compaction_enabled = False
 
+    from api.services.configuration.language_support import language_directive
+
     engine = PipecatEngine(
         llm=llm,
         inference_llm=inference_llm,
@@ -543,6 +556,7 @@ async def _run_pipeline(
         embeddings_api_version=embeddings_api_version,
         has_recordings=has_recordings,
         context_compaction_enabled=context_compaction_enabled,
+        language_instruction=language_directive(agent_language),
     )
 
     # Create pipeline components

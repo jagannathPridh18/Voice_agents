@@ -1,3 +1,24 @@
+// Per-agent language options offered at agent-creation time. The `code` is
+// sent to the backend as CreateWorkflowRequest.language and must stay in sync
+// with api/services/configuration/language_support.py::AGENT_LANGUAGES.
+export interface AgentLanguageOption {
+    code: string;
+    label: string;
+}
+
+export const AGENT_LANGUAGES: AgentLanguageOption[] = [
+    { code: "en", label: "English" },
+    { code: "hi", label: "Hindi (हिन्दी)" },
+    { code: "bn", label: "Bengali (বাংলা)" },
+    { code: "ta", label: "Tamil (தமிழ்)" },
+    { code: "te", label: "Telugu (తెలుగు)" },
+    { code: "kn", label: "Kannada (ಕನ್ನಡ)" },
+    { code: "gu", label: "Gujarati (ગુજરાતી)" },
+    { code: "mr", label: "Marathi (मराठी)" },
+    { code: "ml", label: "Malayalam (മലയാളം)" },
+    { code: "pa", label: "Punjabi (ਪੰਜਾਬੀ)" },
+];
+
 // Display names for language codes (Deepgram + Sarvam)
 export const LANGUAGE_DISPLAY_NAMES: Record<string, string> = {
     "multi": "Multilingual (Auto-detect)",

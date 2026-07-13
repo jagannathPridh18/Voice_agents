@@ -8,11 +8,22 @@ import { toast } from 'sonner';
 import { createWorkflowApiV1WorkflowCreateDefinitionPost } from '@/client/sdk.gen';
 import { Button } from "@/components/ui/button";
 import {
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogFooter,
+    DialogHeader,
+    DialogTitle,
+} from "@/components/ui/dialog";
+import {
     DropdownMenu,
     DropdownMenuContent,
     DropdownMenuItem,
     DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { AGENT_LANGUAGES } from '@/constants/languages';
 import { useAuth } from '@/lib/auth';
 import logger from '@/lib/logger';
 import { getRandomId } from '@/lib/utils';
@@ -48,6 +59,8 @@ export function CreateWorkflowButton() {
     const router = useRouter();
     const { user, getAccessToken } = useAuth();
     const [isCreating, setIsCreating] = useState(false);
+    const [showLanguageDialog, setShowLanguageDialog] = useState(false);
+    const [language, setLanguage] = useState('en');
 
     const handleAgentBuilder = () => {
         router.push('/workflow/create');
@@ -64,13 +77,21 @@ export function CreateWorkflowButton() {
                 body: {
                     name,
                     workflow_definition: BLANK_WORKFLOW_DEFINITION as unknown as { [key: string]: unknown },
+                    language,
                 },
                 headers: {
                     'Authorization': `Bearer ${accessToken}`,
                 },
             });
 
+            if (response.error) {
+                logger.error(`Error creating blank workflow: ${JSON.stringify(response.error)}`);
+                toast.error('Failed to create workflow');
+                return;
+            }
+
             if (response.data?.id) {
+                setShowLanguageDialog(false);
                 router.push(`/workflow/${response.data.id}`);
             }
         } catch (err) {
@@ -82,30 +103,63 @@ export function CreateWorkflowButton() {
     };
 
     return (
-        <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-                <Button disabled={isCreating}>
-                    <PlusIcon className="w-4 h-4" />
-                    {isCreating ? 'Creating...' : 'Create Agent'}
-                    <ChevronDown className="w-4 h-4" />
-                </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-                <DropdownMenuItem onClick={handleAgentBuilder} className="cursor-pointer">
-                    <Bot className="w-4 h-4 mr-2" />
-                    <div>
-                        <div className="font-medium">Use Agent Builder</div>
-                        <div className="text-xs text-muted-foreground">AI generates a workflow from your description</div>
+        <>
+            <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                    <Button disabled={isCreating}>
+                        <PlusIcon className="w-4 h-4" />
+                        {isCreating ? 'Creating...' : 'Create Agent'}
+                        <ChevronDown className="w-4 h-4" />
+                    </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                    <DropdownMenuItem onClick={handleAgentBuilder} className="cursor-pointer">
+                        <Bot className="w-4 h-4 mr-2" />
+                        <div>
+                            <div className="font-medium">Use Agent Builder</div>
+                            <div className="text-xs text-muted-foreground">AI generates a workflow from your description</div>
+                        </div>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => setShowLanguageDialog(true)} disabled={isCreating} className="cursor-pointer">
+                        <LayoutTemplate className="w-4 h-4 mr-2" />
+                        <div>
+                            <div className="font-medium">Blank Canvas</div>
+                            <div className="text-xs text-muted-foreground">Start from scratch with an empty workflow</div>
+                        </div>
+                    </DropdownMenuItem>
+                </DropdownMenuContent>
+            </DropdownMenu>
+
+            <Dialog open={showLanguageDialog} onOpenChange={(open) => !isCreating && setShowLanguageDialog(open)}>
+                <DialogContent className="sm:max-w-md">
+                    <DialogHeader>
+                        <DialogTitle>Choose agent language</DialogTitle>
+                        <DialogDescription>
+                            The agent will listen, speak, and respond only in this language. You can change it later in the agent&apos;s model settings.
+                        </DialogDescription>
+                    </DialogHeader>
+                    <div className="space-y-2 py-2">
+                        <Label htmlFor="blank-language">Language</Label>
+                        <Select value={language} onValueChange={setLanguage} disabled={isCreating}>
+                            <SelectTrigger id="blank-language">
+                                <SelectValue placeholder="Select language" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                {AGENT_LANGUAGES.map((lang) => (
+                                    <SelectItem key={lang.code} value={lang.code}>
+                                        {lang.label}
+                                    </SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
                     </div>
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={handleBlankCanvas} disabled={isCreating} className="cursor-pointer">
-                    <LayoutTemplate className="w-4 h-4 mr-2" />
-                    <div>
-                        <div className="font-medium">Blank Canvas</div>
-                        <div className="text-xs text-muted-foreground">Start from scratch with an empty workflow</div>
-                    </div>
-                </DropdownMenuItem>
-            </DropdownMenuContent>
-        </DropdownMenu>
+                    <DialogFooter>
+                        <Button onClick={handleBlankCanvas} disabled={isCreating} className="w-full">
+                            {isCreating ? 'Creating...' : 'Create Agent'}
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
+        </>
     );
 }

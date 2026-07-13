@@ -64,6 +64,7 @@ export interface WorkflowConfigurations {
     voicemail_detection?: VoicemailDetectionConfiguration;
     context_compaction_enabled?: boolean;  // Summarize context on node transitions to remove stale tool calls
     model_overrides?: ModelOverrides;  // Per-workflow model configuration overrides
+    language?: string | null;  // Per-agent language: agent listens/speaks/responds only in this language
     [key: string]: unknown;  // Allow additional properties for future configurations
 }
 
