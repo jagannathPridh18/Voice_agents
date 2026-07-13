@@ -18,6 +18,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
+import { AGENT_LANGUAGES } from '@/constants/languages';
 import { useAuth } from '@/lib/auth';
 import logger from '@/lib/logger';
 
@@ -32,6 +33,7 @@ export default function CreateWorkflowPage() {
     const [callType, setCallType] = useState<'inbound' | 'outbound'>('inbound');
     const [useCase, setUseCase] = useState('');
     const [activityDescription, setActivityDescription] = useState('');
+    const [language, setLanguage] = useState('en');
 
     const handleCreateWorkflow = async () => {
         if (!useCase || !activityDescription) {
@@ -56,6 +58,7 @@ export default function CreateWorkflowPage() {
                     call_type: callType,
                     use_case: useCase,
                     activity_description: activityDescription,
+                    language,
                 },
                 headers: {
                     'Authorization': `Bearer ${accessToken}`,
@@ -114,6 +117,25 @@ export default function CreateWorkflowPage() {
                             </Select>
                             <p className="text-sm text-muted-foreground">
                                 Choose whether users will call your AI or your AI will call users
+                            </p>
+                        </div>
+
+                        <div className="space-y-2">
+                            <Label htmlFor="language">Language</Label>
+                            <Select value={language} onValueChange={setLanguage}>
+                                <SelectTrigger id="language">
+                                    <SelectValue placeholder="Select language" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    {AGENT_LANGUAGES.map((lang) => (
+                                        <SelectItem key={lang.code} value={lang.code}>
+                                            {lang.label}
+                                        </SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                            <p className="text-sm text-muted-foreground">
+                                The agent will listen, speak, and respond only in this language
                             </p>
                         </div>
 
@@ -201,7 +223,8 @@ export default function CreateWorkflowPage() {
                                     A voice agent workflow has been generated for your use case, with some artificial data and sample actions.
                                 </p>
                                 <p>
-                                    The voice bot is pre-set to communicate in English with an American accent.
+                                    The voice bot is pre-set to communicate in{' '}
+                                    {AGENT_LANGUAGES.find((l) => l.code === language)?.label ?? 'English'}.
                                 </p>
                                 <p>
                                     Next steps would be to test the voice bot in the editor, and then modify it to suit your use case.

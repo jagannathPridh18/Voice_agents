@@ -1,7 +1,7 @@
 "use client";
 
 import { format } from "date-fns";
-import { ArrowLeft, BookA, Brain, CalendarIcon, Clipboard, Download, ExternalLink, FileDown, Fingerprint, Loader2, Mic, Pause, PhoneOff, Play, Rocket, Settings, Trash2Icon, Upload, Variable, X } from "lucide-react";
+import { ArrowLeft, BookA, Brain, CalendarIcon, Clipboard, Download, ExternalLink, FileDown, Fingerprint, Languages, Loader2, Mic, Pause, PhoneOff, Play, Rocket, Settings, Trash2Icon, Upload, Variable, X } from "lucide-react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -24,6 +24,7 @@ import { Separator } from "@/components/ui/separator";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { SETTINGS_DOCUMENTATION_URLS } from "@/constants/documentation";
+import { AGENT_LANGUAGES } from "@/constants/languages";
 import { UnsavedChangesProvider, useUnsavedChanges, useUnsavedChangesContext } from "@/context/UnsavedChangesContext";
 import { useAudioPlayback } from "@/hooks/useAudioPlayback";
 import { useAuth } from "@/lib/auth";
@@ -836,6 +837,86 @@ function DictionarySection({
 }
 
 // ---------------------------------------------------------------------------
+// Section: Agent Language
+// ---------------------------------------------------------------------------
+
+// Sentinel for "no forced language" — the agent behaves normally (follows the
+// selected providers and the node prompts) with no language enforcement.
+const NO_AGENT_LANGUAGE = "none";
+
+function AgentLanguageSection({
+    workflowConfigurations,
+    workflowName,
+    onSave,
+}: {
+    workflowConfigurations: WorkflowConfigurations;
+    workflowName: string;
+    onSave: (configurations: WorkflowConfigurations, workflowName: string) => Promise<void>;
+}) {
+    const initial = workflowConfigurations.language || NO_AGENT_LANGUAGE;
+    const [language, setLanguage] = useState<string>(initial);
+    const [isSaving, setIsSaving] = useState(false);
+
+    const isDirty = language !== initial;
+
+    useUnsavedChanges("agent-language", isDirty);
+
+    const handleSave = async () => {
+        setIsSaving(true);
+        try {
+            await onSave(
+                {
+                    ...workflowConfigurations,
+                    language: language === NO_AGENT_LANGUAGE ? null : language,
+                },
+                workflowName,
+            );
+        } catch (error) {
+            console.error("Failed to save agent language:", error);
+        } finally {
+            setIsSaving(false);
+        }
+    };
+
+    return (
+        <Card id="agent-language">
+            <CardHeader>
+                <CardTitle className="flex items-center gap-2 text-base">
+                    <Languages className="h-4 w-4" />
+                    Agent Language
+                </CardTitle>
+                <CardDescription>
+                    The agent listens, speaks, and responds only in this language, using your selected STT/TTS
+                    providers. Choose &quot;No forced language&quot; to disable it. For full coverage of Indian
+                    languages, use Sarvam as your STT/TTS provider.
+                </CardDescription>
+            </CardHeader>
+            <CardContent>
+                <Select value={language} onValueChange={setLanguage}>
+                    <SelectTrigger className="max-w-sm">
+                        <SelectValue placeholder="Select language" />
+                    </SelectTrigger>
+                    <SelectContent>
+                        <SelectItem value={NO_AGENT_LANGUAGE}>No forced language</SelectItem>
+                        {AGENT_LANGUAGES.map((lang) => (
+                            <SelectItem key={lang.code} value={lang.code}>
+                                {lang.label}
+                            </SelectItem>
+                        ))}
+                    </SelectContent>
+                </Select>
+            </CardContent>
+            <CardFooter className="justify-end gap-3 border-t pt-6">
+                {isDirty && <span className="text-xs text-muted-foreground">Unsaved changes</span>}
+                <Button onClick={handleSave} disabled={isSaving || !isDirty}>
+                    {isSaving ? "Saving..." : "Save Language"}
+                </Button>
+            </CardFooter>
+        </Card>
+    );
+}
+
+// ---------------------------------------------------------------------------
 // Section: Voicemail Detection
 // ---------------------------------------------------------------------------
 
@@ -1249,6 +1330,13 @@ function WorkflowSettingsInner({
                                     />
                                 </CardContent>
                             </Card>
+
+                            {/* Agent Language */}
+                            <AgentLanguageSection
+                                workflowConfigurations={workflowConfigurations}
+                                workflowName={workflowName}
+                                onSave={saveWorkflowConfigurations}
+                            />
 
                             {/* Template Variables */}
                             <TemplateVariablesSection

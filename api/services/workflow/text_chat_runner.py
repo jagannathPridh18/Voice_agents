@@ -471,9 +471,12 @@ async def execute_text_chat_pending_turn(
         embeddings_base_url = getattr(user_config.embeddings, "base_url", None)
 
     has_recordings = await db_client.has_active_recordings(workflow.organization_id)
-    context_compaction_enabled = (workflow.workflow_configurations or {}).get(
+    workflow_configurations = workflow.workflow_configurations or {}
+    context_compaction_enabled = workflow_configurations.get(
         "context_compaction_enabled", False
     )
+
+    from api.services.configuration.language_support import language_directive
 
     engine = PipecatEngine(
         llm=llm,
@@ -488,6 +491,7 @@ async def execute_text_chat_pending_turn(
         embeddings_base_url=embeddings_base_url,
         has_recordings=has_recordings,
         context_compaction_enabled=context_compaction_enabled,
+        language_instruction=language_directive(workflow_configurations.get("language")),
     )
     engine._gathered_context = dict(base_checkpoint["gathered_context"])
 

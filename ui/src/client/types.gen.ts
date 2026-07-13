@@ -1004,6 +1004,12 @@ export type CreateWorkflowRequest = {
     workflow_definition: {
         [key: string]: unknown;
     };
+    /**
+     * Language
+     *
+     * Optional agent language code (e.g. 'hi', 'ta', 'en'). When set, the agent listens (STT), speaks (TTS), and responds (LLM) only in that language.
+     */
+    language?: string | null;
 };
 
 /**
@@ -1072,6 +1078,12 @@ export type CreateWorkflowTemplateRequest = {
      * Activity Description
      */
     activity_description: string;
+    /**
+     * Language
+     *
+     * Optional agent language code (e.g. 'hi', 'ta', 'en'). When set, the generated agent listens, speaks, and responds only in that language.
+     */
+    language?: string | null;
 };
 
 /**

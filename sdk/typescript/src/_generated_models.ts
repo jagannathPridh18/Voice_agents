@@ -345,6 +345,11 @@ export interface components {
             workflow_definition: {
                 [key: string]: unknown;
             };
+            /**
+             * Language
+             * @description Optional agent language code (e.g. 'hi', 'ta', 'en'). When set, the agent listens (STT), speaks (TTS), and responds (LLM) only in that language. See the supported codes in api.services.configuration.language_support.AGENT_LANGUAGES.
+             */
+            language?: string | null;
         };
         /**
          * CreatedByResponse

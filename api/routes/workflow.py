@@ -19,6 +19,10 @@ from api.schemas.workflow import WorkflowRunResponseSchema
 from api.sdk_expose import sdk_expose
 from api.services.auth.depends import get_user
 from api.services.configuration.check_validity import UserConfigurationValidator
+from api.services.configuration.language_support import (
+    AGENT_LANGUAGES,
+    is_supported_language,
+)
 from api.services.configuration.masking import (
     mask_workflow_configurations,
     mask_workflow_definition,
@@ -235,6 +239,15 @@ class WorkflowTemplateResponse(BaseModel):
 class CreateWorkflowRequest(BaseModel):
     name: str
     workflow_definition: dict
+    language: str | None = Field(
+        default=None,
+        description=(
+            "Optional agent language code (e.g. 'hi', 'ta', 'en'). When set, "
+            "the agent listens (STT), speaks (TTS), and responds (LLM) only in "
+            "that language. See the supported codes in "
+            "api.services.configuration.language_support.AGENT_LANGUAGES."
+        ),
+    )
 
 
 class DuplicateTemplateRequest(BaseModel):
@@ -283,6 +296,14 @@ class CreateWorkflowTemplateRequest(BaseModel):
     call_type: Literal[CallType.INBOUND.value, CallType.OUTBOUND.value]
     use_case: str
     activity_description: str
+    language: str | None = Field(
+        default=None,
+        description=(
+            "Optional agent language code (e.g. 'hi', 'ta', 'en'). When set, "
+            "the generated agent listens, speaks, and responds only in that "
+            "language."
+        ),
+    )
 
 
 @router.post("/{workflow_id}/validate")
@@ -347,6 +368,24 @@ def _transform_schema_errors(
     return out
 
 
+def _workflow_configurations_for_language(language: str | None) -> dict | None:
+    """Validate an agent language code and wrap it as workflow_configurations.
+
+    Returns None when no language is requested, or ``{"language": code}`` when
+    a supported code is given. Raises HTTP 400 for an unrecognized code so the
+    caller can't create an agent pinned to a language the runtime can't map.
+    """
+    if not language:
+        return None
+    if not is_supported_language(language):
+        supported = ", ".join(lang["code"] for lang in AGENT_LANGUAGES)
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unsupported language '{language}'. Supported codes: {supported}.",
+        )
+    return {"language": language}
+
+
 @router.post(
     "/create/definition",
     **sdk_expose(
@@ -364,6 +403,10 @@ async def create_workflow(
         request: The create workflow request
         user: The user to create the workflow for
     """
+    # Validate the agent language (if any) before creating anything so we
+    # don't leave an orphaned workflow on a bad code.
+    workflow_configurations = _workflow_configurations_for_language(request.language)
+
     # Auto-mint trigger_path for any trigger node that didn't ship one so
     # clients don't need to generate UUIDs themselves.
     workflow_definition = ensure_trigger_paths(request.workflow_definition)
@@ -389,6 +432,7 @@ async def create_workflow(
         workflow_definition,
         user.id,
         user.selected_organization_id,
+        workflow_configurations=workflow_configurations,
     )
 
     capture_event(
@@ -477,6 +521,9 @@ async def create_workflow_from_template(
             workflow_definition=workflow_def,
             user_id=user.id,
             organization_id=user.selected_organization_id,
+            workflow_configurations=_workflow_configurations_for_language(
+                request.language
+            ),
         )
 
         capture_event(
@@ -916,6 +963,20 @@ async def update_workflow(
         HTTPException: If the workflow is not found or if there's a database error
     """
     try:
+        # Validate the per-agent language (if the client is setting one). A
+        # null/absent language is valid — it clears any forced language.
+        if request.workflow_configurations is not None:
+            requested_language = request.workflow_configurations.get("language")
+            if requested_language and not is_supported_language(requested_language):
+                supported = ", ".join(lang["code"] for lang in AGENT_LANGUAGES)
+                raise HTTPException(
+                    status_code=400,
+                    detail=(
+                        f"Unsupported language '{requested_language}'. "
+                        f"Supported codes: {supported}."
+                    ),
+                )
+
         # Strip UI runtime-only fields (invalid, validationMessage, etc.) from
         # node.data / edge.data before anything touches the DB — the UI sends
         # nodes wholesale from the React Flow store, which carries those.
