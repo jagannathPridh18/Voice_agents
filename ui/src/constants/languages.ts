@@ -7,6 +7,7 @@ export interface AgentLanguageOption {
 }
 
 export const AGENT_LANGUAGES: AgentLanguageOption[] = [
+    // Indian languages (Sarvam/Google cover all; Deepgram/Dograh cover most)
     { code: "en", label: "English" },
     { code: "hi", label: "Hindi (हिन्दी)" },
     { code: "bn", label: "Bengali (বাংলা)" },
@@ -17,6 +18,35 @@ export const AGENT_LANGUAGES: AgentLanguageOption[] = [
     { code: "mr", label: "Marathi (मराठी)" },
     { code: "ml", label: "Malayalam (മലയാളം)" },
     { code: "pa", label: "Punjabi (ਪੰਜਾਬੀ)" },
+    // International languages supported by both Deepgram STT and Murf TTS
+    { code: "fr", label: "French" },
+    { code: "de", label: "German" },
+    { code: "it", label: "Italian" },
+    { code: "es", label: "Spanish" },
+    { code: "pt", label: "Portuguese" },
+    { code: "ru", label: "Russian" },
+    { code: "ar", label: "Arabic" },
+    { code: "zh-CN", label: "Chinese (Simplified)" },
+    { code: "ja", label: "Japanese" },
+    { code: "ko", label: "Korean" },
+    { code: "nl", label: "Dutch" },
+    { code: "da", label: "Danish" },
+    { code: "fi", label: "Finnish" },
+    { code: "no", label: "Norwegian" },
+    { code: "sv", label: "Swedish" },
+    { code: "ro", label: "Romanian" },
+    { code: "tr", label: "Turkish" },
+    { code: "el", label: "Greek" },
+    { code: "bg", label: "Bulgarian" },
+    { code: "cs", label: "Czech" },
+    { code: "sk", label: "Slovak" },
+    { code: "hr", label: "Croatian" },
+    { code: "pl", label: "Polish" },
+    { code: "th", label: "Thai" },
+    { code: "ms", label: "Malay" },
+    { code: "id", label: "Indonesian" },
+    { code: "tl", label: "Tagalog" },
+    { code: "vi", label: "Vietnamese" },
 ];
 
 // Display names for language codes (Deepgram + Sarvam)

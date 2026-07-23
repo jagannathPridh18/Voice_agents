@@ -100,13 +100,24 @@ def _resolve_llm_config(user_config: UserConfiguration) -> tuple[str, str, str, 
     return provider, model, api_key, kwargs
 
 
+# UI-only spec metadata the authoring model doesn't need — dropped from the
+# prompt to cut input tokens (and prefill latency) on every generation attempt.
+_SPEC_UI_ONLY_KEYS = frozenset({"icon", "category", "display_name", "version"})
+
+
 def _core_node_specs_json() -> str:
     specs = [
-        s.model_dump(mode="json")
+        {
+            k: v
+            for k, v in s.model_dump(mode="json").items()
+            if k not in _SPEC_UI_ONLY_KEYS
+        }
         for s in all_specs()
         if s.name in _CORE_NODE_TYPES
     ]
-    return json.dumps(specs, indent=1)
+    # Compact separators (no pretty-print whitespace) — the model parses this
+    # fine and it's ~25% smaller than indented JSON.
+    return json.dumps(specs, separators=(",", ":"))
 
 
 def _voice_guide_text() -> str:
@@ -153,6 +164,12 @@ Author the workflow as `@dograh/sdk` TypeScript. Follow this exact form:
     wf.edge(qualify, done, { label: "handled", condition: "caller's request is resolved" });
 
 Rules:
+- KEEP IT SIMPLE AND MINIMAL. Aim for 3–5 nodes TOTAL: one `startCall`, one or
+  two `agentNode`s, and one `endCall` — plus a single `globalNode` only when a
+  shared persona is clearly needed. Do NOT build elaborate multi-branch trees or
+  add a node per conversational turn. A few well-written prompts beat many nodes,
+  and a smaller graph is faster to generate and validate. Only add more nodes if
+  the use case genuinely cannot be expressed in 5.
 - `new Workflow({ name })` is REQUIRED — set a short snake_case name.
 - Exactly ONE `startCall` node (the entry point). At least one `endCall` node.
 - Optional: at most ONE `globalNode` for shared persona/tone/rules. Set
@@ -188,9 +205,9 @@ def _build_user_prompt(
         f"Call type: {call_type}\n"
         f"Use case: {use_case}\n"
         f"What the agent should do:\n{activity_description}\n\n"
-        f"Use `{workflow_name}` as the Workflow name. Design an appropriate "
-        f"multi-step {call_type.lower()} call flow for this use case and emit "
-        "the SDK TypeScript now."
+        f"Use `{workflow_name}` as the Workflow name. Design a SIMPLE, minimal "
+        f"{call_type.lower()} call flow (3–5 nodes) for this use case — the "
+        "smallest graph that gets the job done — and emit the SDK TypeScript now."
     )
 
 

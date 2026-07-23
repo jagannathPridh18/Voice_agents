@@ -242,3 +242,4 @@ echo "Logs: tail -f $LOG_DIR/*.log"
 echo "Rotated logs: ls $LOG_DIR/*.log.*"
 echo "To stop: ./scripts/stop_services.sh"
 echo "──────────────────────────────────────────────────"
+
